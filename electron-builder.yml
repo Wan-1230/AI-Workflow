@@ -1,0 +1,20 @@
+appId: com.ai-workflow.app
+productName: AI Workflow
+directories:
+  buildResources: resources
+  output: release
+files:
+  - dist-electron
+  - dist
+win:
+  target: nsis
+  icon: resources/icon.ico
+mac:
+  target: dmg
+  icon: resources/icon.icns
+linux:
+  target: AppImage
+  icon: resources/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

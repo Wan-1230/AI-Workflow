@@ -1,0 +1,33 @@
+<h2>Q5: 部署 & 运行方式</h2>
+<p class="subtitle">面向个人开发者，你希望工具以什么形态运行？</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>本地桌面应用</h3>
+      <p>Electron / Tauri 打包，双击即用，数据本地存储，不依赖服务器</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Web 应用 + Docker 自托管</h3>
+      <p>浏览器访问，docker-compose 一键启动，可部署在家里的 NAS/VPS 上</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>CLI 命令行工具</h3>
+      <p>终端里定义和运行工作流，轻量、脚本友好、可 CI/CD 集成</p>
+    </div>
+  </div>
+  <div class="option" data-choice="d" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Web 优先，CLI 辅助</h3>
+      <p>主力是 Web UI（Docker 部署），同时提供 CLI 用于自动化脚本和 CI 集成</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,97 @@
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== 全局基底 ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+
+body {
+  font-family: 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  background: #08090c;
+  color: #d4d6dc;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== 精密噪点纹理 ===== */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ===== 玻璃面板基底类 ===== */
+.glass-surface {
+  background: rgba(22, 23, 30, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 0.5px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-surface-light {
+  background: rgba(28, 29, 37, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 0.5px solid rgba(255, 255, 255, 0.04);
+}
+
+/* ===== React Flow 主题 ===== */
+.react-flow__background { background: #0c0d12 !important; }
+
+.react-flow__controls {
+  border-radius: 8px !important; overflow: hidden !important;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,255,255,0.05) !important;
+  background: rgba(22, 23, 30, 0.9) !important;
+  backdrop-filter: blur(8px) !important;
+}
+.react-flow__controls button {
+  background: transparent !important; border: none !important;
+  border-bottom: 0.5px solid rgba(255,255,255,0.04) !important;
+  fill: #8b8d98 !important; width: 28px !important; height: 28px !important;
+  transition: all 150ms ease !important;
+}
+.react-flow__controls button:hover { background: rgba(255,255,255,0.04) !important; fill: #d4d6dc !important; }
+.react-flow__controls button:last-child { border-bottom: none !important; }
+
+.react-flow__minimap {
+  background: rgba(22, 23, 30, 0.9) !important; border-radius: 8px !important;
+  overflow: hidden !important; box-shadow: 0 2px 16px rgba(0,0,0,0.5) !important;
+  backdrop-filter: blur(8px) !important;
+}
+.react-flow__attribution { display: none !important; }
+
+/* edges */
+.react-flow__edge-path { stroke: #2e2f39 !important; stroke-width: 1.5 !important; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: #5b8def !important; }
+
+/* handles */
+.react-flow__handle {
+  transition: transform 180ms ease, background 180ms ease !important;
+}
+.react-flow__handle:hover { transform: scale(1.5) !important; }
+
+/* ===== 自定义滚动条 ===== */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #24252e; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #2e2f39; }
+
+/* ===== 输入框统一 ===== */
+input:focus, textarea:focus, select:focus {
+  box-shadow: 0 0 0 2px rgba(91, 141, 239, 0.15);
+}
+
+/* ===== 拖拽预览 ===== */
+.drag-preview {
+  opacity: 0.9; transform: rotate(1deg) scale(1.02);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  border-radius: 10px;
+}
+
+/* ===== JetBrains Mono 用于代码 ===== */
+.font-mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
