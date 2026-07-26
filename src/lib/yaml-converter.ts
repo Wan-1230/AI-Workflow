@@ -159,7 +159,7 @@ export function autoLayoutNodes(nodes: WorkflowNode[], edges: WorkflowEdge[]): M
     const filtered = currentLayer.filter(n => !visited.has(n.id))
     if (filtered.length === 0) break
 
-    visited.add(new Set(filtered.map(n => n.id)))
+    filtered.forEach(n => visited.add(n.id))
     layers.push(filtered.map(n => n.id))
 
     const nextLayer: typeof currentLayer = []

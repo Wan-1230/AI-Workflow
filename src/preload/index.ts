@@ -34,4 +34,18 @@ contextBridge.exposeInMainWorld('api', {
 
   dialogOpen: () =>
     ipcRenderer.invoke('dialog:open'),
+
+  // 菜单事件监听
+  onMenuEvent: (callback: (action: string) => void) => {
+    const actions = ['menu:new', 'menu:open', 'menu:save', 'menu:help'] as const
+    const handler = (_event: Electron.IpcRendererEvent, action?: string) => {
+      if (action) callback(action)
+    }
+    for (const a of actions) {
+      ipcRenderer.on(a, (_e) => callback(a.replace('menu:', '')))
+    }
+    return () => {
+      for (const a of actions) ipcRenderer.removeAllListeners(a)
+    }
+  },
 })

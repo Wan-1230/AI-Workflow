@@ -8,13 +8,14 @@ const catNames: Record<string, string> = { trigger: '触发器', action: '动作
 
 interface BaseNodeData { label: string; nodeType: string; category: string; color: string; icon: string; config: Record<string, unknown> }
 
-function BaseNodeComponent({ id, data, selected }: NodeProps) {
+function BaseNodeComponent({ id, data, selected, positionAbsoluteX, positionAbsoluteY }: NodeProps) {
   const { selectNode, execution, removeNode, addNode } = useWorkflowStore()
   const nd = data as unknown as BaseNodeData
   const status: ExecutionStatus = execution.nodeStatuses[id] || 'idle'
   const Icon = iconMap[nd.icon] || Play
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const isCondition = nd.nodeType === 'condition'
 
   useEffect(() => {
     if (!menu) return
@@ -25,16 +26,16 @@ function BaseNodeComponent({ id, data, selected }: NodeProps) {
   const onCtx = useCallback((e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); selectNode(id); setMenu({ x: e.clientX, y: e.clientY }) }, [id, selectNode])
 
   const st: Record<ExecutionStatus, string> = {
-    idle: 'border-border', running: 'border-sig-amber animate-breathe', success: 'border-sig-green', error: 'border-sig-red',
+    idle: 'border-border', running: 'border-sig-amber animate-breathe', success: 'border-sig-green', error: 'border-sig-red', cancelled: 'border-t-muted opacity-50',
   }
   const dot: Record<ExecutionStatus, string> = {
-    idle: 'bg-t-muted', running: 'bg-sig-amber', success: 'bg-sig-green', error: 'bg-sig-red',
+    idle: 'bg-t-muted', running: 'bg-sig-amber', success: 'bg-sig-green', error: 'bg-sig-red', cancelled: 'bg-t-faint',
   }
 
   return (
     <>
-      <div className={`relative px-3.5 py-3 rounded-xl border min-w-[170px] cursor-pointer transition-all duration-200 ${st[status]}
-        ${selected ? 'shadow-node-selected' : 'shadow-node hover:shadow-card-hover'} glass-surface`}
+      <div className={`relative px-3.5 py-3 rounded-xl border bg-card min-w-[170px] cursor-pointer transition-all duration-200 ${st[status]}
+        ${selected ? 'shadow-node-selected' : 'shadow-node hover:shadow-card-hover hover:-translate-y-0.5'}`}
         onClick={e => { e.stopPropagation(); selectNode(id) }} onContextMenu={onCtx}>
         <div className="flex items-center gap-2 mb-2.5">
           <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: nd.color + '15', color: nd.color }}>
@@ -48,15 +49,31 @@ function BaseNodeComponent({ id, data, selected }: NodeProps) {
             {catNames[nd.category] || nd.category}
           </span>
         </div>
+
+        {/* 输入 handle */}
         <Handle type="target" position={Position.Top} className="!w-2 !h-2 !bg-t-muted !border-2 !border-card transition-all" />
-        <Handle type="source" position={Position.Bottom} className="!w-2 !h-2 !bg-sig-green !border-2 !border-card transition-all" />
+
+        {/* 输出 handle：条件节点有两个（true/false），其他节点一个 */}
+        {isCondition ? (
+          <>
+            <Handle type="source" position={Position.Bottom} id="true"
+              className="!w-2.5 !h-2.5 !bg-sig-green !border-2 !border-card transition-all" style={{ left: '30%' }} />
+            <Handle type="source" position={Position.Bottom} id="false"
+              className="!w-2.5 !h-2.5 !bg-sig-red !border-2 !border-card transition-all" style={{ left: '70%' }} />
+            {/* 分支标签 */}
+            <span className="absolute -bottom-4 left-[20%] text-[8px] text-sig-green font-mono font-bold">T</span>
+            <span className="absolute -bottom-4 left-[63%] text-[8px] text-sig-red font-mono font-bold">F</span>
+          </>
+        ) : (
+          <Handle type="source" position={Position.Bottom} className="!w-2 !h-2 !bg-sig-green !border-2 !border-card transition-all" />
+        )}
       </div>
 
       {menu && (
         <div ref={menuRef} className="fixed z-[100] bg-panel border border-border rounded-xl shadow-glass py-1.5 min-w-[150px] animate-fade-up overflow-hidden"
           style={{ left: menu.x, top: menu.y }}>
           <div className="px-3 py-1 text-3xs text-t-muted border-b border-border mb-0.5 uppercase tracking-wider">{nd.label}</div>
-          <MIcon onClick={() => { addNode(nd.nodeType, { x: (nd.position as any)?.x + 40 || 400, y: (nd.position as any)?.y + 60 || 300 }); setMenu(null) }}>
+          <MIcon onClick={() => { addNode(nd.nodeType, { x: (positionAbsoluteX || 0) + 40, y: (positionAbsoluteY || 0) + 60 }); setMenu(null) }}>
             <Copy size={13} /> 复制节点</MIcon>
           <MIcon onClick={() => setMenu(null)}><RotateCcw size={13} /> 重置状态</MIcon>
           <div className="border-t border-border my-0.5" />

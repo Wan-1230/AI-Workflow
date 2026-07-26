@@ -10,8 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "declaration": true,
-    "declarationMap": true,
+    "noEmit": true,
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
@@ -19,8 +18,5 @@
       "@shared/*": ["packages/shared/src/*"]
     }
   },
-  "include": ["src/**/*", "electron/**/*", "packages/**/*"],
-  "references": [
-    { "path": "./tsconfig.node.json" }
-  ]
+  "include": ["src/**/*", "electron/**/*", "packages/**/*"]
 }

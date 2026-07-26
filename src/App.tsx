@@ -1,12 +1,26 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
 import { WorkflowCanvas } from './components/canvas/WorkflowCanvas'
 import { NodePalette } from './components/panels/NodePalette'
 import { NodeConfig } from './components/panels/NodeConfig'
 import { ExecutionLog } from './components/panels/ExecutionLog'
 import { Toolbar } from './components/panels/Toolbar'
+import { useWorkflowStore } from './stores/workflow-store'
 
 function App() {
+  // 监听原生菜单事件
+  useEffect(() => {
+    const unsub = window.api.onMenuEvent((action: string) => {
+      const s = useWorkflowStore.getState()
+      switch (action) {
+        case 'new':  s.handleNew();  break
+        case 'open': s.handleOpen(); break
+        case 'save': s.handleSave(); break
+        case 'help': s.toggleHelp(); break
+      }
+    })
+    return unsub
+  }, [])
   return (
     <ReactFlowProvider>
       <div className="h-screen w-screen flex flex-col">

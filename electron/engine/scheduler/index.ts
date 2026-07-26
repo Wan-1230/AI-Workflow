@@ -72,21 +72,62 @@ export class Scheduler {
 
   /**
    * 识别可以并行执行的节点组
-   * 同一组内的节点没有相互依赖，可以并发
+   * 同一组内的节点没有相互依赖，可以并发执行
+   * 使用 BFS 分层：入度为0的节点为第一层，每层完成后减少下游入度
    */
   getParallelGroups(nodes: WorkflowNode[], edges: Edge[]): string[][] {
-    const order = this.topologicalSort(nodes, edges)
+    if (nodes.length === 0) return []
+
+    // 构建入度表和邻接表
+    const inDegree = new Map<string, number>()
+    const adjacency = new Map<string, string[]>()
+
+    for (const node of nodes) {
+      inDegree.set(node.id, 0)
+      adjacency.set(node.id, [])
+    }
+
+    for (const edge of edges) {
+      // 只处理存在于节点列表中的边
+      if (!inDegree.has(edge.source) || !inDegree.has(edge.target)) continue
+      adjacency.get(edge.source)!.push(edge.target)
+      inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1)
+    }
+
+    // BFS 分层
     const groups: string[][] = []
-    const completed = new Set<string>()
+    let currentLayer: string[] = []
 
-    for (const nodeId of order) {
-      // 检查该节点的所有前置节点是否都在当前组之前已完成
-      const deps = edges.filter(e => e.target === nodeId).map(e => e.source)
+    for (const [nodeId, degree] of inDegree) {
+      if (degree === 0) {
+        currentLayer.push(nodeId)
+      }
+    }
 
-      // 简单策略：每个节点单独一组
-      // 更复杂的并行检测可在后续版本实现
-      groups.push([nodeId])
-      completed.add(nodeId)
+    const processed = new Set<string>()
+
+    while (currentLayer.length > 0) {
+      groups.push([...currentLayer])
+
+      const nextLayer: string[] = []
+      for (const nodeId of currentLayer) {
+        processed.add(nodeId)
+        const neighbors = adjacency.get(nodeId) || []
+        for (const neighbor of neighbors) {
+          const newDegree = (inDegree.get(neighbor) || 1) - 1
+          inDegree.set(neighbor, newDegree)
+          if (newDegree === 0 && !processed.has(neighbor)) {
+            nextLayer.push(neighbor)
+          }
+        }
+      }
+      currentLayer = nextLayer
+    }
+
+    // 检查循环依赖
+    if (processed.size !== nodes.length) {
+      const remaining = nodes.filter(n => !processed.has(n.id)).map(n => n.id)
+      throw new Error(`检测到循环依赖！未排序的节点: ${remaining.join(', ')}`)
     }
 
     return groups

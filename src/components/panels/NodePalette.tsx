@@ -8,8 +8,8 @@ function DragNode({ node }: { node: UINodeDefinition }) {
   const I = icons[node.icon] || Play
   return (
     <div draggable onDragStart={e => { e.dataTransfer.setData('application/reactflow-type', node.type); e.dataTransfer.effectAllowed = 'move' }}
-      className="group flex items-center gap-2.5 px-2.5 py-2 rounded-md cursor-grab active:cursor-grabbing
-        bg-card hover:bg-overlay border border-transparent hover:border-border transition-all duration-150">
+      className="group flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-grab active:cursor-grabbing
+        bg-card hover:bg-overlay border border-border hover:border-accent/40 hover:shadow-card transition-all duration-150">
       <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: node.color + '14', color: node.color }}>
         <I size={14} />
       </div>
@@ -24,13 +24,14 @@ function DragNode({ node }: { node: UINodeDefinition }) {
 export function NodePalette() {
   const [q, setQ] = useState('')
   const cats = nodeCategories.map(c => ({ ...c, nodes: c.nodes.filter(n => !q || n.displayName.includes(q) || n.description.includes(q)) })).filter(c => c.nodes.length > 0)
+  const total = nodeCategories.reduce((a, c) => a + c.nodes.length, 0)
 
   return (
     <div className="w-56 min-w-[224px] h-full border-r border-border bg-panel overflow-y-auto animate-slide-l">
       <div className="p-3">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-[11px] font-semibold text-t-muted uppercase tracking-widest">节点</h2>
-          <span className="text-3xs text-t-muted bg-card rounded-full px-2 py-0.5 font-mono">5</span>
+          <span className="text-3xs text-t-muted bg-base rounded-full px-2 py-0.5 font-mono">{total}</span>
         </div>
         <div className="relative mb-3">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-t-faint" />

@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useRef, useState } from 'react'
-import { Terminal, CheckCircle2, AlertCircle, Circle, ChevronRight, ChevronDown } from 'lucide-react'
+import { Terminal, CheckCircle2, AlertCircle, Circle, ChevronRight, ChevronDown, Ban } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
 
 export function ExecutionLog() {
@@ -22,6 +22,7 @@ export function ExecutionLog() {
     running:   { text: '执行中',   Icon: Terminal,      cls: 'text-sig-amber bg-sig-amber/5' },
     completed: { text: '完成',     Icon: CheckCircle2,  cls: 'text-sig-green bg-sig-green/5' },
     error:     { text: '出错',     Icon: AlertCircle,   cls: 'text-sig-red bg-sig-red/5' },
+    cancelled: { text: '已取消',   Icon: Ban,           cls: 'text-t-muted bg-t-muted/5' },
   }
   const s = sc[status] || sc.idle; const Si = s.Icon
 
@@ -31,7 +32,7 @@ export function ExecutionLog() {
         <div className="flex items-center gap-2">
           <Terminal size={12} className="text-t-muted" />
           <span className="text-[10px] font-semibold text-t-muted uppercase tracking-widest">日志</span>
-          {logs.length > 0 && <span className="text-3xs text-t-muted bg-card rounded-full px-1.5 py-px font-mono">{logs.length}</span>}
+          {logs.length > 0 && <span className="text-3xs text-t-muted bg-base rounded-full px-1.5 py-px font-mono">{logs.length}</span>}
         </div>
         <div className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-sm ${s.cls}`}>
           <Si size={10} /><span>{s.text}</span>
@@ -62,7 +63,7 @@ export function ExecutionLog() {
                     {hasOut && <span className="text-t-faint shrink-0 mt-px">{isOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}</span>}
                   </div>
                   {isOpen && log.output && (
-                    <div className="ml-12 mb-1.5 p-2 bg-card rounded-sm border border-border text-[10px] font-mono text-t-secondary">
+                    <div className="ml-12 mb-1.5 p-2 bg-base rounded-md border border-border text-[10px] font-mono text-t-secondary">
                       {Object.entries(log.output).map(([k, v]) => (
                         <div key={k} className="flex gap-2 py-px">
                           <span className="text-accent shrink-0">{k}:</span>

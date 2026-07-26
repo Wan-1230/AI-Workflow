@@ -4,8 +4,11 @@ directories:
   buildResources: resources
   output: release
 files:
-  - dist-electron
-  - dist
+  - out/**/*
+  - "!node_modules/**/*"
+extraMetadata:
+  main: out/main/index.js
+npmRebuild: true
 win:
   target: nsis
   icon: resources/icon.ico
@@ -18,3 +21,5 @@ linux:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

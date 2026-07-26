@@ -13,10 +13,10 @@ import {
 import { v4 as uuid } from 'uuid'
 import { nodeDefinitions } from './node-definitions'
 
-export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error'
+export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled'
 
 export interface ExecutionState {
-  status: 'idle' | 'running' | 'completed' | 'error'
+  status: 'idle' | 'running' | 'completed' | 'error' | 'cancelled'
   nodeStatuses: Record<string, ExecutionStatus>
   logs: { nodeId: string; message: string; timestamp: number; output?: Record<string, unknown> }[]
 }
@@ -25,6 +25,7 @@ interface WorkflowStore {
   // 画布数据
   nodes: Node[]
   edges: Edge[]
+  workflowId: string
   workflowName: string
 
   // 选中状态
@@ -58,11 +59,22 @@ interface WorkflowStore {
 
   // 范例
   loadExample: () => void
+
+  // 文件操作（供菜单和工具栏共用）
+  handleNew: () => void
+  handleOpen: () => Promise<void>
+  handleSave: () => Promise<void>
+  handleSaveAs: () => Promise<void>
+
+  // 帮助
+  showHelp: boolean
+  toggleHelp: () => void
 }
 
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   nodes: [],
   edges: [],
+  workflowId: uuid(),
   workflowName: '未命名工作流',
   selectedNodeId: null,
   execution: {
@@ -70,6 +82,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     nodeStatuses: {},
     logs: []
   },
+
+  showHelp: false,
+  toggleHelp: () => set({ showHelp: !get().showHelp }),
 
   // ===== 画布操作 =====
 
@@ -128,7 +143,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   // ===== 工作流操作 =====
 
   setWorkflowName: (name) => set({ workflowName: name }),
-  clearCanvas: () => set({ nodes: [], edges: [], execution: { status: 'idle', nodeStatuses: {}, logs: [] } }),
+  clearCanvas: () => set({ nodes: [], edges: [], workflowId: uuid(), execution: { status: 'idle', nodeStatuses: {}, logs: [] } }),
 
   // ===== 执行操作 =====
 
@@ -157,6 +172,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           get().setNodeStatus(event.nodeId, 'error')
           const errMsg = event.data?.error as string || '未知错误'
           get().addLog(event.nodeId, `执行失败 ❌: ${errMsg}`)
+        } else if (event.type === 'node:log' && event.nodeId) {
+          const msg = event.data?.message as string || ''
+          if (msg) get().addLog(event.nodeId, msg)
+        } else if (event.type === 'node:cancelled' && event.nodeId) {
+          get().setNodeStatus(event.nodeId, 'cancelled')
+          get().addLog(event.nodeId, '已取消 ⚠️')
         }
       })
 
@@ -165,7 +186,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       unsubscribe()
 
       if (result.success) {
-        set({ execution: { ...get().execution, status: 'completed' } })
+        // 检查是否有节点被取消
+        const resultData = result.result as Record<string, { status?: string }> | undefined
+        const wasCancelled = resultData && Object.values(resultData).some(r => r.status === 'cancelled')
+        set({ execution: { ...get().execution, status: wasCancelled ? 'cancelled' : 'completed' } })
       } else {
         set({ execution: { ...get().execution, status: 'error' } })
       }
@@ -203,7 +227,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   toWorkflowJSON: () => {
     const state = get()
     return {
-      id: uuid(),
+      id: state.workflowId,
       name: state.workflowName,
       nodes: state.nodes.map(node => ({
         id: node.id,
@@ -224,8 +248,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     }
   },
 
-  fromWorkflowJSON: (json) => {
-    const wf = json as any
+  fromWorkflowJSON: (json: Record<string, unknown>) => {
+    const wf = json as Record<string, any>
     const nodes: Node[] = (wf.nodes || []).map((n: any) => {
       const def = nodeDefinitions[n.type]
       return {
@@ -254,6 +278,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     set({
       nodes,
       edges,
+      workflowId: wf.id || uuid(),
       workflowName: wf.name || '未命名工作流',
       selectedNodeId: null,
       execution: { status: 'idle', nodeStatuses: {}, logs: [] }
@@ -299,5 +324,46 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       selectedNodeId: null,
       execution: { status: 'idle', nodeStatuses: {}, logs: [] }
     })
-  }
+  },
+
+  // ===== 文件操作 =====
+
+  handleNew: () => {
+    if (get().nodes.length === 0) { get().clearCanvas(); return }
+    if (confirm('确定要新建工作流吗？未保存的内容将丢失。')) get().clearCanvas()
+  },
+
+  handleOpen: async () => {
+    try {
+      const r = await window.api.dialogOpen()
+      if (r.success && r.data) {
+        get().fromWorkflowJSON(r.data as unknown as Record<string, unknown>)
+      }
+    } catch { /* 用户取消 */ }
+  },
+
+  handleSave: async () => {
+    try {
+      const json = get().toWorkflowJSON()
+      const content = JSON.stringify(json, null, 2)
+      const name = get().workflowName
+      const r = await window.api.dialogSave(`${name}.json`, content)
+      if (r.success && r.path) {
+        const baseName = r.path.split(/[\\/]/).pop()?.replace('.json', '') || name
+        get().setWorkflowName(baseName)
+      }
+    } catch { /* 用户取消 */ }
+  },
+
+  handleSaveAs: async () => {
+    try {
+      const json = get().toWorkflowJSON()
+      const content = JSON.stringify(json, null, 2)
+      const r = await window.api.dialogSave(`${get().workflowName}.json`, content)
+      if (r.success && r.path) {
+        const baseName = r.path.split(/[\\/]/).pop()?.replace('.json', '') || get().workflowName
+        get().setWorkflowName(baseName)
+      }
+    } catch { /* 用户取消 */ }
+  },
 }))

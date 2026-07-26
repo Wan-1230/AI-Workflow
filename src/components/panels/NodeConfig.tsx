@@ -21,7 +21,7 @@ export function NodeConfig() {
     return (
       <div className="w-64 min-w-[256px] h-full border-l border-border bg-panel overflow-y-auto animate-slide-r">
         <div className="flex flex-col items-center justify-center h-full px-4 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-card flex items-center justify-center mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-base flex items-center justify-center mb-3">
             <Settings size={20} className="text-t-faint" />
           </div>
           <p className="text-sm text-t-secondary font-medium">未选中节点</p>
@@ -46,7 +46,7 @@ export function NodeConfig() {
             <div><span className="font-semibold text-[13px] text-t-primary block tracking-tight">{def.displayName}</span>
               <span className="text-3xs text-t-muted font-mono uppercase">{def.type}</span></div>
           </div>
-          <button onClick={() => removeNode(selectedNodeId)}
+          <button onClick={() => selectedNodeId && removeNode(selectedNodeId)}
             className="w-7 h-7 flex items-center justify-center rounded-sm text-t-muted hover:text-sig-red hover:bg-sig-red/5 transition-colors">
             <Trash2 size={14} /></button>
         </div>
@@ -54,7 +54,7 @@ export function NodeConfig() {
         {/* 名称 */}
         <div className="mb-3">
           <label className="text-[10px] font-semibold text-t-muted uppercase tracking-wider mb-1.5 block">名称</label>
-          <input type="text" value={String(selectedNode.data.label)} onChange={e => updateNodeData(selectedNodeId, { label: e.target.value })}
+          <input type="text" value={String(selectedNode.data.label)} onChange={e => selectedNodeId && updateNodeData(selectedNodeId, { label: e.target.value })}
             className="w-full px-2.5 py-1.5 text-[12px] bg-card border border-border rounded-sm text-t-primary placeholder:text-t-faint focus:border-accent/40 focus:outline-none transition-colors" />
         </div>
 

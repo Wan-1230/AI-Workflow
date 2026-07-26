@@ -24,6 +24,7 @@ export interface NodeContext {
   config: Record<string, unknown>
   inputs: Record<string, unknown>
   secrets: Record<string, string>
+  signal?: AbortSignal
   logger: (msg: string) => void
 }
 
