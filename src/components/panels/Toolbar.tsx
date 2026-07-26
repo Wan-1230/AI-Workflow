@@ -5,11 +5,11 @@ import { HelpTutorial } from './HelpTutorial'
 import { ExecutionHistory } from './ExecutionHistory'
 
 const statusMeta: Record<string, { label: string; dot: string }> = {
-  idle:      { label: '就绪',   dot: 'bg-t-faint' },
-  running:   { label: '运行中', dot: 'bg-sig-amber animate-breathe' },
-  completed: { label: '完成',   dot: 'bg-sig-green' },
-  error:     { label: '出错',   dot: 'bg-sig-red' },
-  cancelled: { label: '已取消', dot: 'bg-t-faint' },
+  idle:      { label: 'idle',    dot: 'bg-t-faint' },
+  running:   { label: 'running', dot: 'bg-sig-amber animate-breathe' },
+  completed: { label: 'done',    dot: 'bg-sig-green' },
+  error:     { label: 'error',   dot: 'bg-sig-red' },
+  cancelled: { label: 'cancel',  dot: 'bg-t-faint' },
 }
 
 export function Toolbar() {
@@ -27,67 +27,64 @@ export function Toolbar() {
   const sm = statusMeta[execution.status] || statusMeta.idle
 
   return (
-    <div className="h-12 min-h-[48px] flex items-center justify-between px-5 border-b border-border glass-surface z-10 relative">
-      {/* 左侧：品牌 + 名称 + 统计胶囊 */}
+    <div className="h-11 min-h-[44px] flex items-center justify-between px-4 border-b border-border bg-panel z-10 relative">
+      {/* 左：品牌标识 + 名称 */}
       <div className="flex items-center gap-3">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg, #7c5cf0 0%, #5b5bd6 100%)' }}>
-          <FileText size={14} className="text-white" />
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-sm bg-accent flex items-center justify-center">
+            <span className="text-[9px] font-bold text-white font-display tracking-tighter">W</span>
+          </div>
+          <span className="font-display text-[13px] font-bold text-t-primary tracking-tight">Workflow</span>
         </div>
+
+        <div className="w-px h-4 bg-border" />
+
         {isEditing ? (
           <input type="text" value={editName}
             onChange={e => setEditName(e.target.value)}
             onBlur={() => { setWorkflowName(editName); setIsEditing(false) }}
             onKeyDown={e => { if (e.key === 'Enter') { setWorkflowName(editName); setIsEditing(false) }}}
-            className="text-[13px] font-medium bg-card border border-accent/40 rounded-md px-2.5 py-1 text-t-primary focus:outline-none w-48"
+            className="text-[12px] font-medium bg-card border border-accent/50 rounded px-2 py-0.5 text-t-primary focus:outline-none w-40"
             autoFocus />
         ) : (
           <button onClick={() => { setEditName(workflowName); setIsEditing(true) }}
-            className="group flex items-center gap-1.5 text-[13px] font-semibold text-t-primary tracking-tight hover:text-accent transition-colors">
+            className="group flex items-center gap-1 text-[12px] font-medium text-t-secondary hover:text-t-primary transition-colors">
             <span>{workflowName}</span>
-            <Pencil size={11} className="opacity-0 group-hover:opacity-100 transition-opacity text-t-muted" />
+            <Pencil size={10} className="opacity-0 group-hover:opacity-60 transition-opacity text-t-muted" />
           </button>
         )}
 
-        {/* Mercor 式分段统计胶囊 */}
+        {/* 状态指示器 */}
         {nodes.length > 0 && (
-          <div className="hidden sm:flex items-center rounded-full border border-border bg-card overflow-hidden text-[11px]">
-            <div className="flex items-center gap-1.5 px-3 py-1">
-              <span className="text-t-muted">节点</span>
-              <span className="font-semibold text-t-primary tabular-nums">{nodes.length}</span>
-            </div>
-            <div className="w-px h-4 bg-border" />
-            <div className="flex items-center gap-1.5 px-3 py-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${sm.dot}`} />
-              <span className="font-medium text-t-secondary">{sm.label}</span>
-            </div>
+          <div className="flex items-center gap-2 ml-2 text-[10px] font-mono text-t-muted">
+            <span>{nodes.length}n</span>
+            <span className={`w-1.5 h-1.5 rounded-full ${sm.dot}`} />
+            <span>{sm.label}</span>
           </div>
         )}
       </div>
 
-      {/* 右侧：操作 */}
-      <div className="flex items-center gap-1">
-        <TbBtn onClick={handleNew}><Plus size={14} /><span>新建</span></TbBtn>
-        <TbBtn onClick={handleOpen}><FolderOpen size={14} /><span>打开</span></TbBtn>
+      {/* 右：操作 */}
+      <div className="flex items-center gap-0.5">
+        <TbBtn onClick={handleNew}><Plus size={13} /></TbBtn>
+        <TbBtn onClick={handleOpen}><FolderOpen size={13} /></TbBtn>
         <TbBtn onClick={() => { if (!nodes.length || confirm('当前画布不为空，确定加载范例吗？')) loadExample() }}
-          className="text-sig-amber hover:text-sig-amber hover:bg-sig-amber/10"><Lightbulb size={14} /><span>范例</span></TbBtn>
-        <TbBtn onClick={handleSave}><Save size={14} /><span>保存</span></TbBtn>
-        <div className="w-px h-5 bg-border mx-1.5" />
-        <TbBtn onClick={() => setShowHistory(true)}><History size={14} /><span>历史</span></TbBtn>
-        <TbBtn onClick={() => setShowHelp(true)}><HelpCircle size={14} /><span>帮助</span></TbBtn>
+          className="text-sig-amber"><Lightbulb size={13} /></TbBtn>
+        <TbBtn onClick={handleSave}><Save size={13} /></TbBtn>
+        <div className="w-px h-4 bg-border mx-1.5" />
+        <TbBtn onClick={() => setShowHistory(true)}><History size={13} /></TbBtn>
+        <TbBtn onClick={() => setShowHelp(true)}><HelpCircle size={13} /></TbBtn>
+        <div className="w-px h-4 bg-border mx-1.5" />
         {isRunning ? (
           <button onClick={handleStop}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ml-1.5
-              bg-sig-red text-white hover:brightness-105 shadow-sm active:scale-[0.98]">
-            <Square size={13} />
-            <span>停止</span>
+            className="press-feedback flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold rounded bg-sig-red text-white transition-all ml-1">
+            <Square size={11} /> 停止
           </button>
         ) : (
           <button onClick={handleRun} disabled={nodes.length === 0}
-            className={`flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ml-1.5
-              ${nodes.length === 0 ? 'bg-overlay text-t-faint cursor-not-allowed' : 'bg-accent text-white hover:bg-accent-muted shadow-sm shadow-accent/20 active:scale-[0.98]'}`}>
-            <Play size={13} />
-            <span>运行</span>
+            className={`press-feedback flex items-center gap-1.5 px-3 py-1 text-[11px] font-semibold rounded transition-all ml-1
+              ${nodes.length === 0 ? 'bg-overlay text-t-faint cursor-not-allowed' : 'bg-accent text-white hover:bg-accent-muted'}`}>
+            <Play size={11} /> 运行
           </button>
         )}
       </div>
@@ -100,7 +97,7 @@ export function Toolbar() {
 function TbBtn({ children, className = '', onClick }: { children: React.ReactNode; className?: string; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-t-secondary hover:text-t-primary hover:bg-overlay rounded-lg transition-colors ${className}`}>
+      className={`press-feedback flex items-center justify-center w-7 h-7 text-t-muted hover:text-t-primary hover:bg-overlay rounded transition-colors ${className}`}>
       {children}
     </button>
   )

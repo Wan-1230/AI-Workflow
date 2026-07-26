@@ -25,13 +25,13 @@ export function WorkflowCanvas() {
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
         onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
         onDrop={onDrop} onPaneClick={() => selectNode(null)}
-        nodeTypes={nodeTypes} fitView snapToGrid snapGrid={[20, 20]}
+        nodeTypes={nodeTypes} fitView snapToGrid snapGrid={[16, 16]}
         deleteKeyCode={['Backspace', 'Delete']}
-        defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: '#cfd2db', strokeWidth: 1.6 } }}
-        style={{ background: 'radial-gradient(120% 90% at 50% -20%, #ffffff 0%, #f1f2f6 72%)' }}>
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1.1} color="#e2e4ea" />
+        defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: '#d6d3d1', strokeWidth: 1.5 } }}
+        style={{ background: '#f5f2ed' }}>
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e2ddd6" />
         <Controls />
-        <MiniMap nodeColor={(n) => (n.data?.color as string) || '#4f7cf0'} maskColor="rgba(255,255,255,0.7)" style={{ background: '#ffffff' }} />
+        <MiniMap nodeColor={(n) => (n.data?.color as string) || '#b45309'} maskColor="rgba(245,242,237,0.8)" style={{ background: '#faf8f5' }} />
       </ReactFlow>
     </div>
   )

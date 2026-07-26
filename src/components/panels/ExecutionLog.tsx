@@ -17,55 +17,51 @@ export function ExecutionLog() {
 
   const toggle = (i: number) => setExpanded(p => { const n = new Set(p); n.has(i) ? n.delete(i) : n.add(i); return n })
 
-  const sc: Record<string, { text: string; Icon: React.ElementType; cls: string }> = {
-    idle:      { text: '就绪',     Icon: Circle,        cls: 'text-t-muted bg-t-muted/5' },
-    running:   { text: '执行中',   Icon: Terminal,      cls: 'text-sig-amber bg-sig-amber/5' },
-    completed: { text: '完成',     Icon: CheckCircle2,  cls: 'text-sig-green bg-sig-green/5' },
-    error:     { text: '出错',     Icon: AlertCircle,   cls: 'text-sig-red bg-sig-red/5' },
-    cancelled: { text: '已取消',   Icon: Ban,           cls: 'text-t-muted bg-t-muted/5' },
+  const sc: Record<string, { text: string; cls: string }> = {
+    idle:      { text: 'idle',    cls: 'text-t-muted' },
+    running:   { text: 'run',     cls: 'text-sig-amber' },
+    completed: { text: 'done',    cls: 'text-sig-green' },
+    error:     { text: 'err',     cls: 'text-sig-red' },
+    cancelled: { text: 'cancel',  cls: 'text-t-muted' },
   }
-  const s = sc[status] || sc.idle; const Si = s.Icon
+  const s = sc[status] || sc.idle
 
   return (
-    <div className="border-t border-border bg-panel flex flex-col" style={{ minHeight: 160, maxHeight: 340 }}>
-      <div className="flex items-center justify-between px-3.5 py-2 border-b border-border shrink-0">
+    <div className="border-t border-border bg-panel flex flex-col" style={{ minHeight: 140, maxHeight: 280 }}>
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
-          <Terminal size={12} className="text-t-muted" />
-          <span className="text-[10px] font-semibold text-t-muted uppercase tracking-widest">日志</span>
-          {logs.length > 0 && <span className="text-3xs text-t-muted bg-base rounded-full px-1.5 py-px font-mono">{logs.length}</span>}
+          <Terminal size={10} className="text-t-muted" />
+          <span className="text-[9px] font-bold text-t-muted uppercase tracking-widest font-mono">log</span>
+          {logs.length > 0 && <span className="text-[9px] text-t-faint font-mono">{logs.length}</span>}
         </div>
-        <div className={`flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-sm ${s.cls}`}>
-          <Si size={10} /><span>{s.text}</span>
-        </div>
+        <span className={`text-[9px] font-bold font-mono uppercase tracking-wider ${s.cls}`}>{s.text}</span>
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3.5 py-2">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-1.5">
         {logs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-t-muted gap-1">
-            <Terminal size={14} className="opacity-20" />
-            <p className="text-[10px] font-mono">待执行</p>
+          <div className="flex items-center justify-center h-full text-t-faint">
+            <p className="text-[10px] font-mono">awaiting execution</p>
           </div>
         ) : (
-          <div className="space-y-0.5 pl-0.5 border-l border-border ml-1">
+          <div className="space-y-0.5">
             {logs.map((log, i) => {
               const label = labels[log.nodeId] || log.nodeId
-              const isErr = log.message.includes('❌')
-              const isOk = log.message.includes('✅')
+              const isErr = log.message.includes('\u274c')
+              const isOk = log.message.includes('\u2705')
               const hasOut = log.output && Object.keys(log.output).length > 0
               const isOpen = expanded.has(i)
               return (
-                <div key={i} className="animate-fade-up">
-                  <div className={`flex items-start gap-2 text-[11px] py-0.5 ${hasOut ? 'cursor-pointer hover:bg-overlay/50 rounded-sm px-1 -mx-1' : ''}`}
+                <div key={i}>
+                  <div className={`flex items-start gap-1.5 text-[10px] py-0.5 font-mono ${hasOut ? 'cursor-pointer hover:bg-overlay/50 rounded px-1 -mx-1' : ''}`}
                     onClick={() => hasOut && toggle(i)}>
-                    <div className={`w-1 h-1 rounded-full mt-1.5 shrink-0 ${isErr ? 'bg-sig-red' : isOk ? 'bg-sig-green' : 'bg-accent'}`} />
-                    <span className="text-t-faint shrink-0 font-mono mt-px">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                    <span className={`shrink-0 font-medium ${isErr ? 'text-sig-red' : isOk ? 'text-sig-green' : 'text-accent'}`}>[{label}]</span>
-                    <span className={`break-all flex-1 ${isErr ? 'text-sig-red/70' : 'text-t-secondary'}`}>{log.message}</span>
-                    {hasOut && <span className="text-t-faint shrink-0 mt-px">{isOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}</span>}
+                    <span className="text-t-faint shrink-0">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                    <span className={`shrink-0 font-bold ${isErr ? 'text-sig-red' : isOk ? 'text-sig-green' : 'text-accent'}`}>[{label}]</span>
+                    <span className={`break-all flex-1 ${isErr ? 'text-sig-red/80' : 'text-t-secondary'}`}>{log.message}</span>
+                    {hasOut && <span className="text-t-faint shrink-0">{isOpen ? <ChevronDown size={9} /> : <ChevronRight size={9} />}</span>}
                   </div>
                   {isOpen && log.output && (
-                    <div className="ml-12 mb-1.5 p-2 bg-base rounded-md border border-border text-[10px] font-mono text-t-secondary">
+                    <div className="ml-14 mb-1 p-1.5 bg-base rounded border border-border text-[9px] font-mono text-t-secondary">
                       {Object.entries(log.output).map(([k, v]) => (
-                        <div key={k} className="flex gap-2 py-px">
+                        <div key={k} className="flex gap-1.5 py-px">
                           <span className="text-accent shrink-0">{k}:</span>
                           <span className="text-t-muted break-all">{typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)}</span>
                         </div>
