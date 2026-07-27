@@ -1,3 +1,105 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== Slate Technical 基底 ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #root { height: 100%; width: 100%; overflow: hidden; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.011em;
+  font-weight: 400;
+}
+
+::selection { background: rgba(99, 102, 241, 0.15); color: #0f172a; }
+
+/* ===== 面板基底 ===== */
+.glass-surface {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.glass-surface-light {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e2e8f0;
+}
+
+/* ===== React Flow Slate 主题 ===== */
+.react-flow__background { background: transparent !important; }
+
+.react-flow__controls {
+  border-radius: 8px !important; overflow: hidden !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04) !important;
+  background: #ffffff !important;
+}
+.react-flow__controls button {
+  background: transparent !important; border: none !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  fill: #94a3b8 !important; width: 30px !important; height: 30px !important;
+  transition: all 120ms ease !important;
+}
+.react-flow__controls button:hover { background: #f1f5f9 !important; fill: #0f172a !important; }
+.react-flow__controls button:last-child { border-bottom: none !important; }
+
+.react-flow__minimap {
+  background: #ffffff !important; border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04) !important;
+}
+.react-flow__attribution { display: none !important; }
+
+/* edges */
+.react-flow__edge-path { stroke: #cbd5e1 !important; stroke-width: 1.5 !important; transition: stroke 120ms ease !important; }
+.react-flow__edge:hover .react-flow__edge-path { stroke: #94a3b8 !important; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: #6366f1 !important; stroke-width: 2 !important; }
+
+/* handles */
+.react-flow__handle {
+  transition: transform 120ms ease, box-shadow 120ms ease !important;
+  border: 2px solid #ffffff !important;
+}
+.react-flow__handle:hover { transform: scale(1.4) !important; box-shadow: 0 0 0 3px rgba(99,102,241,0.2) !important; }
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ===== 输入聚焦 ===== */
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  border-color: #6366f1 !important;
+}
+
+/* ===== 拖拽预览 ===== */
+.drag-preview {
+  opacity: 0.95; transform: scale(1.02);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+/* ===== 字体工具 ===== */
+.font-mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+.font-display { font-family: 'Inter', system-ui, sans-serif; }
+
+/* ===== 交互反馈 ===== */
+.press-feedback:active {
+  transform: scale(0.97);
+}
 @import '@fontsource/space-grotesk/400.css';
 @import '@fontsource/space-grotesk/500.css';
 @import '@fontsource/space-grotesk/700.css';

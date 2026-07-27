@@ -5,6 +5,83 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Slate Technical — 冷中性灰阶体系
+        ink:      '#f1f5f9',   // 窗口最深层 / slate-100
+        base:     '#f8fafc',   // 画布背景 / slate-50
+        panel:    '#ffffff',   // 侧栏 / 工具栏 / 日志面板
+        card:     '#ffffff',   // 卡片 / 输入框
+        overlay:  '#f1f5f9',   // 悬停 / slate-100
+        border:   '#e2e8f0',   // slate-200 描边
+        'border-light': '#f1f5f9',
+
+        // 强调色 — Indigo-500 (自信但不张扬)
+        accent:   '#6366f1',
+        'accent-muted': '#4f46e5',
+        'accent-light': '#eef2ff',
+
+        // 节点功能色 / 状态色
+        'sig-blue':   '#3b82f6',
+        'sig-green':  '#22c55e',
+        'sig-amber':  '#f59e0b',
+        'sig-purple': '#8b5cf6',
+        'sig-red':    '#ef4444',
+
+        // 文字 — slate 灰阶
+        't-primary':   '#0f172a',
+        't-secondary': '#475569',
+        't-muted':     '#94a3b8',
+        't-faint':     '#cbd5e1',
+      },
+      fontFamily: {
+        display: ['"Inter"', 'system-ui', 'sans-serif'],
+        sans: ['"Inter"', 'system-ui', '-apple-system', '"Segoe UI"', '"PingFang SC"', '"Microsoft YaHei"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'monospace'],
+      },
+      fontSize: {
+        '3xs': ['0.625rem', { lineHeight: '0.875rem', letterSpacing: '0.02em' }],
+        '2xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.01em' }],
+      },
+      borderRadius: {
+        DEFAULT: '8px', sm: '6px', md: '10px', lg: '12px', xl: '16px', '2xl': '20px',
+      },
+      transitionDuration: {
+        DEFAULT: '150ms', fast: '80ms', slow: '300ms',
+      },
+      boxShadow: {
+        'card': '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
+        'card-hover': '0 4px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)',
+        'node': '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+        'node-selected': '0 0 0 2px #6366f1, 0 4px 12px rgba(99,102,241,0.12)',
+        'glass': '0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
+        'modal': '0 20px 60px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.06)',
+      },
+      keyframes: {
+        'fade-up': { '0%': { opacity:'0', transform:'translateY(6px)' }, '100%': { opacity:'1', transform:'translateY(0)' } },
+        'fade-in': { '0%': { opacity:'0' }, '100%': { opacity:'1' } },
+        'slide-l': { '0%': { opacity:'0', transform:'translateX(-8px)' }, '100%': { opacity:'1', transform:'translateX(0)' } },
+        'slide-r': { '0%': { opacity:'0', transform:'translateX(8px)' }, '100%': { opacity:'1', transform:'translateX(0)' } },
+        'breathe': { '0%,100%': { opacity:'1' }, '50%': { opacity:'0.4' } },
+        'pulse-ring': { '0%': { boxShadow:'0 0 0 0 rgba(245,158,11,0.3)' }, '70%': { boxShadow:'0 0 0 4px rgba(245,158,11,0)' }, '100%': { boxShadow:'0 0 0 0 rgba(245,158,11,0)' } },
+      },
+      animation: {
+        'fade-up': 'fade-up 200ms ease-out',
+        'fade-in': 'fade-in 150ms ease-out',
+        'slide-l': 'slide-l 200ms ease-out',
+        'slide-r': 'slide-r 200ms ease-out',
+        'breathe': 'breathe 2s ease-in-out infinite',
+        'pulse-ring': 'pulse-ring 2s ease-in-out infinite',
+      },
+    },
+  },
+  plugins: [],
+}
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./src/**/*.{ts,tsx}', './index.html'],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
         // Warm Precision 四层体系
         ink:      '#e8e4de',   // 窗口最深层 / 暖灰
         base:     '#f5f2ed',   // 画布背景 / 暖象牙

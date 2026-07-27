@@ -27,11 +27,11 @@ export function WorkflowCanvas() {
         onDrop={onDrop} onPaneClick={() => selectNode(null)}
         nodeTypes={nodeTypes} fitView snapToGrid snapGrid={[16, 16]}
         deleteKeyCode={['Backspace', 'Delete']}
-        defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: '#d6d3d1', strokeWidth: 1.5 } }}
-        style={{ background: '#f5f2ed' }}>
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e2ddd6" />
+        defaultEdgeOptions={{ type: 'smoothstep', style: { stroke: '#cbd5e1', strokeWidth: 1.5 } }}
+        style={{ background: '#f8fafc' }}>
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e2e8f0" />
         <Controls />
-        <MiniMap nodeColor={(n) => (n.data?.color as string) || '#b45309'} maskColor="rgba(245,242,237,0.8)" style={{ background: '#faf8f5' }} />
+        <MiniMap nodeColor={(n) => (n.data?.color as string) || '#6366f1'} maskColor="rgba(248,250,252,0.8)" style={{ background: '#ffffff' }} />
       </ReactFlow>
     </div>
   )

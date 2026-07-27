@@ -19,7 +19,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 680,
     title: 'AI Workflow',
-    backgroundColor: '#f5f2ed',
+    backgroundColor: '#f8fafc',
     titleBarStyle: 'hiddenInset',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
