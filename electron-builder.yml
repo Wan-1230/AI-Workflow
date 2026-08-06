@@ -5,12 +5,16 @@ directories:
   output: release
 files:
   - out/**/*
-  - "!node_modules/**/*"
+  - package.json
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
 extraMetadata:
   main: out/main/index.js
-npmRebuild: true
+npmRebuild: false
 win:
-  target: nsis
+  target:
+    - nsis
+    - portable
   icon: resources/icon.ico
 mac:
   target: dmg
@@ -23,3 +27,6 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+
+portable:
+  artifactName: "${productName}-Portable-${version}.${ext}"

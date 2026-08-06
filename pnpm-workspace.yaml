@@ -1,6 +1,9 @@
 packages:
   - 'packages/*'
 allowBuilds:
-  better-sqlite3: false
+  better-sqlite3: true
   electron: false
   esbuild: false
+overrides:
+  app-builder-lib: 25.0.0
+  dmg-builder: 25.0.0
