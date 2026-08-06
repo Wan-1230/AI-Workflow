@@ -4,12 +4,26 @@ import { WorkflowEngine } from './engine'
 import { validateWorkflow } from './engine/validator'
 import { ExecutionStorage } from './engine/storage'
 import { CredentialManager } from './engine/storage/credentials'
+import { ProjectStore } from './engine/storage/projects'
+import { ModelStore } from './engine/storage/models'
+import { PromptStore } from './engine/storage/prompts'
+import { SettingsStore } from './engine/storage/settings'
+import { workflowTemplates } from './engine/templates'
 import type { WorkflowDefinition, ExecutionEvent } from '@shared/workflow'
+import type { LlmModelInfo } from '@shared/node'
+import type { CreateProjectInput } from '@shared/project'
+import type { ModelConfigInput } from '@shared/model'
+import type { PromptTemplateInput } from '@shared/prompt'
+import type { AppSettingsInput } from '@shared/settings'
 
 let mainWindow: BrowserWindow | null = null
 const engine = new WorkflowEngine()
 let executionStorage: ExecutionStorage | null = null
 let credentialManager: CredentialManager | null = null
+let projectStore: ProjectStore | null = null
+let modelStore: ModelStore | null = null
+let promptStore: PromptStore | null = null
+let settingsStore: SettingsStore | null = null
 let currentExecutionId: string | null = null
 
 function createWindow() {
@@ -135,7 +149,18 @@ function setupIPC() {
 
       // 注入凭证到执行上下文
       const secrets = credentialManager?.getAll() || {}
-      const result = await engine.execute(wf, onEvent, currentExecutionId, secrets)
+
+      // 注入模型运行时信息（含解密后的 API Key，仅存于主进程上下文，不回传渲染进程）
+      const models: LlmModelInfo[] = (modelStore?.list() || []).map(m => ({
+        id: m.id,
+        baseUrl: m.baseUrl,
+        model: m.model,
+        apiKey: modelStore?.getApiKey(m.id) || '',
+        temperature: m.temperature,
+        maxTokens: m.maxTokens
+      })).filter(m => m.apiKey)
+
+      const result = await engine.execute(wf, onEvent, currentExecutionId, secrets, models)
 
       // 将 Map 转为普通对象以便 IPC 序列化
       const resultObj: Record<string, unknown> = {}
@@ -319,6 +344,225 @@ function setupIPC() {
       return { success: false, error: String(err) }
     }
   })
+
+  // ===== 项目库 =====
+
+  // 模板列表
+  ipcMain.handle('templates:list', () => {
+    try {
+      return {
+        success: true,
+        data: workflowTemplates.map(({ id, name, description, icon, category }) => ({ id, name, description, icon, category }))
+      }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // 新建项目（支持模板 / 复制源项目）
+  ipcMain.handle('projects:create', (_event, input: CreateProjectInput) => {
+    try {
+      let workflow: WorkflowDefinition | null = null
+
+      if (input.copyFromId) {
+        // 复制已有项目
+        const summary = projectStore?.duplicate(input.copyFromId, input.name)
+        if (!summary) return { success: false, error: '源项目不存在' }
+        const record = projectStore?.get(summary.id)
+        if (!record) return { success: false, error: '复制项目失败' }
+        workflow = record.workflow
+      } else {
+        // 模板或空白
+        const template = workflowTemplates.find(t => t.id === input.templateId) || workflowTemplates[0]
+        workflow = template.build()
+        workflow.name = input.name
+        workflow.updatedAt = new Date().toISOString()
+      }
+
+      const created = projectStore?.create(input, workflow)
+      if (!created) return { success: false, error: '创建项目失败' }
+      return { success: true, data: created }
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  // 项目列表
+  ipcMain.handle('projects:list', () => {
+    try {
+      return { success: true, data: projectStore?.list() || [] }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // 项目详情（含完整工作流）
+  ipcMain.handle('projects:get', (_event, id: string) => {
+    try {
+      const record = projectStore?.get(id) || null
+      return { success: true, data: record }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // 保存工作流内容
+  ipcMain.handle('projects:saveWorkflow', (_event, id: string, workflow: WorkflowDefinition) => {
+    try {
+      const ok = projectStore?.saveWorkflow(id, workflow) || false
+      return { success: ok, error: ok ? undefined : '项目不存在' }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // 更新元信息（名称/描述）
+  ipcMain.handle('projects:updateMeta', (_event, id: string, meta: { name?: string; description?: string }) => {
+    try {
+      const ok = projectStore?.updateMeta(id, meta) || false
+      return { success: ok, error: ok ? undefined : '项目不存在' }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // 删除项目
+  ipcMain.handle('projects:delete', (_event, id: string) => {
+    try {
+      const ok = projectStore?.delete(id) || false
+      return { success: ok, error: ok ? undefined : '项目不存在' }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // ===== 模型库 =====
+
+  ipcMain.handle('models:list', () => {
+    try {
+      return { success: true, data: modelStore?.list() || [] }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('models:create', (_event, input: ModelConfigInput) => {
+    try {
+      const config = modelStore?.create(input)
+      return config ? { success: true, data: config } : { success: false, error: '创建失败' }
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('models:update', (_event, id: string, input: ModelConfigInput) => {
+    try {
+      const config = modelStore?.update(id, input)
+      return config ? { success: true, data: config } : { success: false, error: '模型不存在' }
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('models:delete', (_event, id: string) => {
+    try {
+      const ok = modelStore?.delete(id) || false
+      return { success: ok, error: ok ? undefined : '模型不存在' }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('models:setDefault', (_event, id: string) => {
+    try {
+      const ok = modelStore?.setDefault(id) || false
+      return { success: ok, error: ok ? undefined : '模型不存在' }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('models:test', async (_event, id: string, apiKeyOverride?: string) => {
+    try {
+      const result = await modelStore?.testConnection(id, apiKeyOverride)
+      return { success: true, data: result }
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  // ===== 提示词库 =====
+
+  ipcMain.handle('prompts:list', (_event, options?: { keyword?: string; category?: string; favoriteOnly?: boolean }) => {
+    try {
+      return { success: true, data: promptStore?.list(options) || [] }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('prompts:upsert', (_event, input: PromptTemplateInput) => {
+    try {
+      const template = promptStore?.upsert(input)
+      return template ? { success: true, data: template } : { success: false, error: '保存失败' }
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('prompts:delete', (_event, id: string) => {
+    try {
+      const ok = promptStore?.delete(id) || false
+      return { success: ok, error: ok ? undefined : '模板不存在' }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('prompts:toggleFavorite', (_event, id: string) => {
+    try {
+      const ok = promptStore?.toggleFavorite(id) || false
+      return { success: ok, error: ok ? undefined : '模板不存在' }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('prompts:categories', () => {
+    try {
+      return { success: true, data: promptStore?.categories() || [] }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('prompts:render', (_event, id: string, variables: Record<string, unknown>) => {
+    try {
+      const result = promptStore?.render(id, variables)
+      return { success: true, data: result }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // ===== 设置 =====
+
+  ipcMain.handle('settings:get', () => {
+    try {
+      return { success: true, data: settingsStore?.getAll() }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('settings:update', (_event, input: AppSettingsInput) => {
+    try {
+      const next = settingsStore?.update(input)
+      return { success: true, data: next }
+    } catch (err: unknown) {
+      return { success: false, error: String(err) }
+    }
+  })
 }
 
 // ===== 应用生命周期 =====
@@ -336,6 +580,28 @@ app.whenReady().then(() => {
     credentialManager = new CredentialManager()
   } catch (err) {
     console.error('初始化凭证管理器失败:', err)
+  }
+
+  // 初始化项目库 / 模型库 / 提示词库 / 设置
+  try {
+    projectStore = new ProjectStore()
+  } catch (err) {
+    console.error('初始化项目库失败:', err)
+  }
+  try {
+    modelStore = new ModelStore()
+  } catch (err) {
+    console.error('初始化模型库失败:', err)
+  }
+  try {
+    promptStore = new PromptStore()
+  } catch (err) {
+    console.error('初始化提示词库失败:', err)
+  }
+  try {
+    settingsStore = new SettingsStore()
+  } catch (err) {
+    console.error('初始化设置存储失败:', err)
   }
 
   setupIPC()
@@ -358,4 +624,8 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   executionStorage?.close()
   credentialManager?.close()
+  projectStore?.close()
+  modelStore?.close()
+  promptStore?.close()
+  settingsStore?.close()
 })

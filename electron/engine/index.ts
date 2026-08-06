@@ -1,4 +1,5 @@
-import type { WorkflowDefinition, WorkflowEdge, ExecutionEvent, NodeResult } from '@shared/workflow'
+import type { WorkflowDefinition, WorkflowEdge, ExecutionEvent, NodeResult, StreamChunk } from '@shared/workflow'
+import type { LlmModelInfo } from '@shared/node'
 import { parseWorkflow } from './parser'
 import { Scheduler } from './scheduler'
 import { Executor } from './executor'
@@ -8,6 +9,9 @@ import { Executor } from './executor'
  * - 支持条件分支路由（基于 edge.sourceHandle）
  * - 支持同层并行执行
  * - 支持执行取消（AbortController）
+ * - 支持全局变量（{{global.KEY}} 跨节点传递）
+ * - 支持子工作流递归执行
+ * - 支持流式输出事件（node:stream）
  * - 每次执行创建独立上下文，无共享状态
  */
 export class WorkflowEngine {
@@ -34,14 +38,15 @@ export class WorkflowEngine {
     wf: WorkflowDefinition,
     onEvent: (event: ExecutionEvent) => void,
     executionId?: string,
-    secrets?: Record<string, string>
+    secrets?: Record<string, string>,
+    models?: LlmModelInfo[]
   ): Promise<Map<string, NodeResult>> {
     const runId = executionId || `run_${Date.now()}`
     const abortController = new AbortController()
     this.activeAborts.set(runId, abortController)
 
     try {
-      return await this.runWorkflow(wf, onEvent, abortController, secrets || {})
+      return await this.runWorkflow(wf, onEvent, abortController, secrets || {}, models)
     } finally {
       this.activeAborts.delete(runId)
     }
@@ -51,7 +56,10 @@ export class WorkflowEngine {
     wf: WorkflowDefinition,
     onEvent: (event: ExecutionEvent) => void,
     abortController: AbortController,
-    secrets: Record<string, string>
+    secrets: Record<string, string>,
+    models?: LlmModelInfo[],
+    /** 父级变量空间（子工作流共享引用，变量跨层传递） */
+    parentVariables?: Record<string, string>
   ): Promise<Map<string, NodeResult>> {
     const signal = abortController.signal
 
@@ -64,6 +72,18 @@ export class WorkflowEngine {
     // 3. 存储节点执行结果
     const nodeResults = new Map<string, NodeResult>()
 
+    // 4. 全局变量：父级优先共享，顶层从 wf.variables 初始化
+    const variables: Record<string, string> = parentVariables || {}
+    if (!parentVariables) {
+      for (const v of wf.variables || []) {
+        if (v.key && !(v.key in variables)) variables[v.key] = v.value
+      }
+    }
+
+    // 流式输出回调：转发为 node:stream 事件
+    const stream: (chunk: StreamChunk) => void = chunk => {
+      onEvent({ type: 'node:stream', nodeId: chunk.nodeId, data: { ...chunk }, timestamp: chunk.timestamp })
+    }
     // 4. 活跃节点集合（用于条件分支路由）
     const activeNodes = new Set<string>()
     for (const group of parallelGroups) {
@@ -86,7 +106,7 @@ export class WorkflowEngine {
 
       // 并行执行同组节点
       const promises = activeInGroup.map(nodeId =>
-        this.executeSingleNode(nodeId, parsed.nodes, wf, nodeResults, activeNodes, onEvent, signal, secrets)
+        this.executeSingleNode(nodeId, parsed.nodes, wf, nodeResults, activeNodes, onEvent, abortController, secrets, models, variables, stream)
       )
 
       await Promise.allSettled(promises)
@@ -121,14 +141,17 @@ export class WorkflowEngine {
     nodeResults: Map<string, NodeResult>,
     activeNodes: Set<string>,
     onEvent: (event: ExecutionEvent) => void,
-    signal: AbortSignal,
-    secrets: Record<string, string>
+    abortController: AbortController,
+    secrets: Record<string, string>,
+    models?: LlmModelInfo[],
+    variables?: Record<string, string>,
+    stream?: (chunk: StreamChunk) => void
   ): Promise<void> {
     const node = nodes.find(n => n.id === nodeId)
     if (!node) return
 
     // 再次检查取消
-    if (signal.aborted) return
+    if (abortController.signal.aborted) return
 
     // 触发节点开始事件
     onEvent({ type: 'node:start', nodeId, timestamp: Date.now() })
@@ -146,16 +169,26 @@ export class WorkflowEngine {
         }
       }
 
-      // 执行节点（带超时和重试）
-      const output = await this.executor.executeNode(node as any, {
-        workflow: wf,
-        nodeResults,
-        secrets,
-        signal,
-        logger: (nid, msg) => {
-          onEvent({ type: 'node:log', nodeId: nid, data: { message: msg }, timestamp: Date.now() })
-        }
-      }, inputs)
+      let output: Record<string, unknown>
+
+      // 子工作流节点：由引擎递归执行（不经过注册表）
+      if (node.type === 'sub-workflow') {
+        output = await this.executeSubWorkflow(node, inputs, onEvent, abortController, secrets, models, variables, stream)
+      } else {
+        // 执行节点（带超时和重试）
+        output = await this.executor.executeNode(node as any, {
+          workflow: wf,
+          nodeResults,
+          secrets,
+          variables: variables || {},
+          models,
+          signal: abortController.signal,
+          stream,
+          logger: (nid, msg) => {
+            onEvent({ type: 'node:log', nodeId: nid, data: { message: msg }, timestamp: Date.now() })
+          }
+        }, inputs)
+      }
 
       const result: NodeResult = {
         nodeId,
@@ -173,7 +206,7 @@ export class WorkflowEngine {
         this.routeBranch(nodeId, String(output.branch), wf.edges, activeNodes)
       }
     } catch (err: unknown) {
-      if (signal.aborted) return // 取消导致的错误不记录
+      if (abortController.signal.aborted) return // 取消导致的错误不记录
 
       const message = err instanceof Error ? err.message : String(err)
       const errorResult: NodeResult = {
@@ -186,6 +219,88 @@ export class WorkflowEngine {
       nodeResults.set(nodeId, errorResult)
 
       onEvent({ type: 'node:error', nodeId, data: { error: message }, timestamp: Date.now() })
+    }
+  }
+
+  /**
+   * 子工作流节点递归执行
+   * 解析内嵌 workflowJson，递归调用 runWorkflow（共享取消控制器，父级取消自动传导）；
+   * 子工作流内部事件仅转发节点级事件（避免重复 workflow:* 终态干扰前端）
+   */
+  private async executeSubWorkflow(
+    node: { id: string; type: string; config: Record<string, unknown> },
+    inputs: Record<string, unknown>,
+    onEvent: (event: ExecutionEvent) => void,
+    abortController: AbortController,
+    secrets: Record<string, string>,
+    models?: LlmModelInfo[],
+    variables?: Record<string, string>,
+    stream?: (chunk: StreamChunk) => void
+  ): Promise<Record<string, unknown>> {
+    const signal = abortController.signal
+    const rawJson = String(node.config.workflowJson || '').trim()
+    if (!rawJson) throw new Error('子工作流未配置：请在节点配置中粘贴子工作流 JSON')
+
+    let subWf: WorkflowDefinition
+    try {
+      subWf = JSON.parse(rawJson) as WorkflowDefinition
+    } catch {
+      throw new Error('子工作流 JSON 解析失败，请检查格式')
+    }
+    if (!Array.isArray(subWf.nodes)) {
+      throw new Error('子工作流 JSON 缺少 nodes 数组')
+    }
+
+    // 子工作流输入注入为全局变量（sub_input 前缀），子流程内可用 {{global.sub_input}} 引用
+    if (inputs && Object.keys(inputs).length > 0 && variables) {
+      variables['sub_input'] = JSON.stringify(inputs)
+    }
+
+    const startedAt = Date.now()
+
+    // 过滤事件：只转发节点级事件，不转发子流程的 workflow:* 终态
+    const subOnEvent = (evt: ExecutionEvent): void => {
+      if (evt.type.startsWith('node:')) {
+        onEvent(evt)
+      }
+    }
+
+    const subResults = await this.runWorkflow(
+      subWf,
+      subOnEvent,
+      abortController,
+      secrets,
+      models,
+      variables
+    )
+
+    // 取消联动：父级取消时同步取消子流程
+    if (signal.aborted) {
+      throw new Error('执行已取消')
+    }
+
+    const subResultObj: Record<string, unknown> = {}
+    let hasError = false
+    for (const [key, value] of subResults) {
+      subResultObj[key] = value
+      if (value.status === 'error') hasError = true
+    }
+
+    const summary: Record<string, unknown> = {
+      nodeCount: subResults.size,
+      errorCount: [...subResults.values()].filter(r => r.status === 'error').length,
+      duration: Date.now() - startedAt
+    }
+
+    if (hasError) {
+      const firstError = [...subResults.values()].find(r => r.status === 'error')
+      throw new Error(`子工作流执行失败: ${firstError?.error || '未知错误'}`)
+    }
+
+    return {
+      results: subResultObj,
+      summary,
+      status: 'success'
     }
   }
 

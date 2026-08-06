@@ -9,86 +9,177 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== Slate Technical 基底 ===== */
+/* =====================================================================
+   设计系统 Token（CSS 变量）— 浅色主题为默认
+   颜色以 RGB 三元组存储，配合 Tailwind `rgb(var() / <alpha-value>)` 使用
+   ===================================================================== */
+:root {
+  /* 表面层级 */
+  --c-app: 241 245 249;      /* slate-100 窗口最深层 */
+  --c-surface: 255 255 255;  /* 面板 / 侧栏 */
+  --c-raised: 255 255 255;   /* 卡片 / 输入框 */
+  --c-overlay: 241 245 249;  /* 悬停 / 凹陷 */
+  --c-canvas: 248 250 252;   /* 画布背景 */
+
+  /* 描边 */
+  --c-line: 226 232 240;         /* slate-200 */
+  --c-line-strong: 203 213 225;  /* slate-300 */
+
+  /* 文字 */
+  --c-fg: 15 23 42;          /* slate-900 */
+  --c-fg-secondary: 71 85 105;   /* slate-500 */
+  --c-fg-muted: 148 163 184;     /* slate-400 */
+  --c-fg-faint: 203 213 225;     /* slate-300 */
+  --c-fg-inverse: 255 255 255;
+
+  /* 强调色 — Indigo */
+  --c-accent: 99 102 241;        /* indigo-500 */
+  --c-accent-strong: 79 70 229;  /* indigo-600 */
+  --c-accent-soft: 238 242 255;  /* indigo-50 */
+  --c-accent-fg: 255 255 255;
+
+  /* 节点功能色 */
+  --c-blue: 59 130 246;
+  --c-green: 34 197 94;
+  --c-amber: 245 158 11;
+  --c-purple: 139 92 246;
+  --c-red: 239 68 68;
+  --c-cyan: 6 182 212;
+
+  /* 阴影 */
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
+  --shadow-card-hover: 0 4px 14px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-node: 0 1px 3px rgba(15, 23, 42, 0.07), 0 0 0 1px rgba(15, 23, 42, 0.05);
+  --shadow-glass: 0 2px 8px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.04);
+  --shadow-modal: 0 20px 60px rgba(15, 23, 42, 0.16), 0 4px 16px rgba(15, 23, 42, 0.08);
+  --shadow-pop: 0 8px 30px rgba(15, 23, 42, 0.12);
+}
+
+/* ============ 深色主题 ============ */
+.dark {
+  --c-app: 8 10 20;          /* 窗口最深层 */
+  --c-surface: 15 20 36;     /* 面板 / 侧栏 */
+  --c-raised: 22 28 48;      /* 卡片 / 输入框 */
+  --c-overlay: 30 37 60;     /* 悬停 / 凹陷 */
+  --c-canvas: 11 14 26;      /* 画布背景 */
+
+  --c-line: 33 41 66;
+  --c-line-strong: 47 57 88;
+
+  --c-fg: 238 242 250;
+  --c-fg-secondary: 148 163 190;
+  --c-fg-muted: 100 116 145;
+  --c-fg-faint: 63 74 102;
+  --c-fg-inverse: 15 23 42;
+
+  --c-accent: 129 140 248;       /* indigo-400 */
+  --c-accent-strong: 99 102 241;
+  --c-accent-soft: 34 38 66;
+  --c-accent-fg: 15 23 42;
+
+  --c-blue: 96 165 250;
+  --c-green: 74 222 128;
+  --c-amber: 251 191 36;
+  --c-purple: 167 139 250;
+  --c-red: 248 113 113;
+  --c-cyan: 34 211 238;
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-node: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-glass: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* =====================================================================
+   全局基底
+   ===================================================================== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body, #root { height: 100%; width: 100%; overflow: hidden; }
 
 body {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+  background: rgb(var(--c-app));
+  color: rgb(var(--c-fg));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.011em;
   font-weight: 400;
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
-::selection { background: rgba(99, 102, 241, 0.15); color: #0f172a; }
+::selection { background: rgb(var(--c-accent) / 0.18); color: rgb(var(--c-fg)); }
 
-/* ===== 面板基底 ===== */
+/* ===== 面板表面 ===== */
 .glass-surface {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: rgb(var(--c-surface));
+  border: 1px solid rgb(var(--c-line));
 }
-
 .glass-surface-light {
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #e2e8f0;
+  background: rgb(var(--c-surface) / 0.95);
+  border: 1px solid rgb(var(--c-line));
 }
 
-/* ===== React Flow Slate 主题 ===== */
+/* =====================================================================
+   React Flow 主题（变量驱动，随主题切换）
+   ===================================================================== */
 .react-flow__background { background: transparent !important; }
 
 .react-flow__controls {
   border-radius: 8px !important; overflow: hidden !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04) !important;
-  background: #ffffff !important;
+  box-shadow: var(--shadow-glass) !important;
+  background: rgb(var(--c-surface)) !important;
 }
 .react-flow__controls button {
   background: transparent !important; border: none !important;
-  border-bottom: 1px solid #f1f5f9 !important;
-  fill: #94a3b8 !important; width: 30px !important; height: 30px !important;
+  border-bottom: 1px solid rgb(var(--c-line)) !important;
+  fill: rgb(var(--c-fg-muted)) !important; width: 30px !important; height: 30px !important;
   transition: all 120ms ease !important;
 }
-.react-flow__controls button:hover { background: #f1f5f9 !important; fill: #0f172a !important; }
+.react-flow__controls button:hover { background: rgb(var(--c-overlay)) !important; fill: rgb(var(--c-fg)) !important; }
 .react-flow__controls button:last-child { border-bottom: none !important; }
 
 .react-flow__minimap {
-  background: #ffffff !important; border-radius: 8px !important;
-  overflow: hidden !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04) !important;
+  background: rgb(var(--c-surface)) !important; border-radius: 8px !important;
+  overflow: hidden !important; box-shadow: var(--shadow-glass) !important;
 }
 .react-flow__attribution { display: none !important; }
 
 /* edges */
-.react-flow__edge-path { stroke: #cbd5e1 !important; stroke-width: 1.5 !important; transition: stroke 120ms ease !important; }
-.react-flow__edge:hover .react-flow__edge-path { stroke: #94a3b8 !important; }
-.react-flow__edge.selected .react-flow__edge-path { stroke: #6366f1 !important; stroke-width: 2 !important; }
+.react-flow__edge-path { stroke: rgb(var(--c-line-strong)) !important; stroke-width: 1.5 !important; transition: stroke 120ms ease !important; }
+.react-flow__edge:hover .react-flow__edge-path { stroke: rgb(var(--c-fg-muted)) !important; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: rgb(var(--c-accent)) !important; stroke-width: 2 !important; }
 
 /* handles */
 .react-flow__handle {
   transition: transform 120ms ease, box-shadow 120ms ease !important;
-  border: 2px solid #ffffff !important;
+  border: 2px solid rgb(var(--c-surface)) !important;
 }
-.react-flow__handle:hover { transform: scale(1.4) !important; box-shadow: 0 0 0 3px rgba(99,102,241,0.2) !important; }
+.react-flow__handle:hover { transform: scale(1.4) !important; box-shadow: 0 0 0 3px rgb(var(--c-accent) / 0.2) !important; }
 
-/* ===== 滚动条 ===== */
+/* 框选 */
+.react-flow__selection { background: rgb(var(--c-accent) / 0.06); border: 1px dashed rgb(var(--c-accent) / 0.5); }
+
+/* =====================================================================
+   滚动条
+   ===================================================================== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar-thumb { background: rgb(var(--c-line-strong)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-fg-muted)); }
 
 /* ===== 输入聚焦 ===== */
 input:focus, textarea:focus, select:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 2px rgb(var(--c-accent) / 0.25);
+  border-color: rgb(var(--c-accent)) !important;
 }
 
 /* ===== 拖拽预览 ===== */
 .drag-preview {
   opacity: 0.95; transform: scale(1.02);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-pop);
   border-radius: 8px;
 }
 
@@ -97,116 +188,12 @@ input:focus, textarea:focus, select:focus {
 .font-display { font-family: 'Inter', system-ui, sans-serif; }
 
 /* ===== 交互反馈 ===== */
-.press-feedback:active {
-  transform: scale(0.97);
-}
-@import '@fontsource/space-grotesk/400.css';
-@import '@fontsource/space-grotesk/500.css';
-@import '@fontsource/space-grotesk/700.css';
-@import '@fontsource/jetbrains-mono/400.css';
-@import '@fontsource/jetbrains-mono/500.css';
+.press-feedback:active { transform: scale(0.97); }
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* ===== Warm Precision 基底 ===== */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html, body, #root { height: 100%; width: 100%; overflow: hidden; }
-
-body {
-  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background: #f5f2ed;
-  color: #1c1917;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  letter-spacing: -0.01em;
-  font-weight: 400;
-}
-
-/* 纸张纹理层 — 杀死 flat vector slop */
-body::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
-  opacity: 0.018;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-::selection { background: rgba(180, 83, 9, 0.12); color: #1c1917; }
-
-/* ===== 面板类（无 glassmorphism，纯物理层） ===== */
-.glass-surface {
-  background: #faf8f5;
-  border: 1px solid #e2ddd6;
-}
-
-.glass-surface-light {
-  background: rgba(250, 248, 245, 0.92);
-  border: 1px solid #e2ddd6;
-}
-
-/* ===== React Flow 暖色主题 ===== */
-.react-flow__background { background: transparent !important; }
-
-.react-flow__controls {
-  border-radius: 6px !important; overflow: hidden !important;
-  box-shadow: 0 1px 3px rgba(28,25,23,0.06), 0 0 0 1px rgba(28,25,23,0.05) !important;
-  background: #faf8f5 !important;
-}
-.react-flow__controls button {
-  background: transparent !important; border: none !important;
-  border-bottom: 1px solid #ece8e2 !important;
-  fill: #a8a29e !important; width: 28px !important; height: 28px !important;
-  transition: all 120ms ease !important;
-}
-.react-flow__controls button:hover { background: #ede9e3 !important; fill: #1c1917 !important; }
-.react-flow__controls button:last-child { border-bottom: none !important; }
-
-.react-flow__minimap {
-  background: #faf8f5 !important; border-radius: 6px !important;
-  overflow: hidden !important;
-  box-shadow: 0 1px 3px rgba(28,25,23,0.06), 0 0 0 1px rgba(28,25,23,0.05) !important;
-}
-.react-flow__attribution { display: none !important; }
-
-/* edges — 暖灰线 */
-.react-flow__edge-path { stroke: #d6d3d1 !important; stroke-width: 1.5 !important; transition: stroke 120ms ease !important; }
-.react-flow__edge:hover .react-flow__edge-path { stroke: #a8a29e !important; }
-.react-flow__edge.selected .react-flow__edge-path { stroke: #b45309 !important; stroke-width: 2 !important; }
-
-/* handles — 物理圆点 */
-.react-flow__handle {
-  transition: transform 120ms ease, box-shadow 120ms ease !important;
-  border: 2px solid #faf8f5 !important;
-}
-.react-flow__handle:hover { transform: scale(1.4) !important; box-shadow: 0 0 0 3px rgba(180,83,9,0.15) !important; }
-
-/* ===== 滚动条（暖色细线） ===== */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #a8a29e; }
-
-/* ===== 输入聚焦（琥珀环，非发光） ===== */
-input:focus, textarea:focus, select:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(180, 83, 9, 0.18);
-  border-color: #b45309 !important;
-}
-
-/* ===== 拖拽预览 ===== */
-.drag-preview {
-  opacity: 0.95; transform: rotate(0.5deg) scale(1.01);
-  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.12);
+/* ===== 骨架屏 shimmer ===== */
+.skeleton {
+  background: linear-gradient(90deg, rgb(var(--c-overlay)) 25%, rgb(var(--c-line)) 50%, rgb(var(--c-overlay)) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
   border-radius: 6px;
-}
-
-/* ===== 字体工具 ===== */
-.font-mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
-.font-display { font-family: 'Space Grotesk', system-ui, sans-serif; }
-
-/* ===== 物理按压反馈 ===== */
-.press-feedback:active {
-  transform: translateY(1px);
-  box-shadow: inset 0 1px 3px rgba(28,25,23,0.1);
 }

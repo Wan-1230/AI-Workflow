@@ -1,40 +1,56 @@
 /** @type {import('tailwindcss').Config} */
+/**
+ * 统一设计系统（单一事实来源）
+ * 所有颜色通过 CSS 变量驱动，支持深浅色主题无缝切换。
+ * 颜色采用 `rgb(var(--token) / <alpha-value>)` 模式，保留 Tailwind 透明度修饰符能力。
+ */
 export default {
-  content: ['./src/**/*.{ts,tsx}', './index.html'],
+  content: ['./src/**/*.{ts,tsx}', './src/renderer/index.html'],
   darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Slate Technical — 冷中性灰阶体系
-        ink:      '#f1f5f9',   // 窗口最深层 / slate-100
-        base:     '#f8fafc',   // 画布背景 / slate-50
-        panel:    '#ffffff',   // 侧栏 / 工具栏 / 日志面板
-        card:     '#ffffff',   // 卡片 / 输入框
-        overlay:  '#f1f5f9',   // 悬停 / slate-100
-        border:   '#e2e8f0',   // slate-200 描边
-        'border-light': '#f1f5f9',
+        // ===== 语义化表面层级 =====
+        app: 'rgb(var(--c-app) / <alpha-value>)',          // 窗口最深层
+        surface: 'rgb(var(--c-surface) / <alpha-value>)',  // 面板 / 侧栏 / 工具栏
+        raised: 'rgb(var(--c-raised) / <alpha-value>)',    // 卡片 / 输入框 / 弹层
+        overlay: 'rgb(var(--c-overlay) / <alpha-value>)',  // 悬停 / 凹陷区
+        canvas: 'rgb(var(--c-canvas) / <alpha-value>)',    // 画布背景
 
-        // 强调色 — Indigo-500 (自信但不张扬)
-        accent:   '#6366f1',
-        'accent-muted': '#4f46e5',
-        'accent-light': '#eef2ff',
+        // ===== 描边 =====
+        line: 'rgb(var(--c-line) / <alpha-value>)',
+        'line-strong': 'rgb(var(--c-line-strong) / <alpha-value>)',
 
-        // 节点功能色 / 状态色
-        'sig-blue':   '#3b82f6',
-        'sig-green':  '#22c55e',
-        'sig-amber':  '#f59e0b',
-        'sig-purple': '#8b5cf6',
-        'sig-red':    '#ef4444',
+        // ===== 文字层级 =====
+        'fg': 'rgb(var(--c-fg) / <alpha-value>)',
+        'fg-secondary': 'rgb(var(--c-fg-secondary) / <alpha-value>)',
+        'fg-muted': 'rgb(var(--c-fg-muted) / <alpha-value>)',
+        'fg-faint': 'rgb(var(--c-fg-faint) / <alpha-value>)',
+        'fg-inverse': 'rgb(var(--c-fg-inverse) / <alpha-value>)',
 
-        // 文字 — slate 灰阶
-        't-primary':   '#0f172a',
-        't-secondary': '#475569',
-        't-muted':     '#94a3b8',
-        't-faint':     '#cbd5e1',
+        // ===== 强调色 =====
+        accent: 'rgb(var(--c-accent) / <alpha-value>)',
+        'accent-strong': 'rgb(var(--c-accent-strong) / <alpha-value>)',
+        'accent-soft': 'rgb(var(--c-accent-soft) / <alpha-value>)',
+        'accent-fg': 'rgb(var(--c-accent-fg) / <alpha-value>)',
+
+        // ===== 节点功能色 / 状态色（两套主题共享）=====
+        'sig-blue': 'rgb(var(--c-blue) / <alpha-value>)',
+        'sig-green': 'rgb(var(--c-green) / <alpha-value>)',
+        'sig-amber': 'rgb(var(--c-amber) / <alpha-value>)',
+        'sig-purple': 'rgb(var(--c-purple) / <alpha-value>)',
+        'sig-red': 'rgb(var(--c-red) / <alpha-value>)',
+        'sig-cyan': 'rgb(var(--c-cyan) / <alpha-value>)',
+
+        // 语义状态
+        success: 'rgb(var(--c-green) / <alpha-value>)',
+        warning: 'rgb(var(--c-amber) / <alpha-value>)',
+        danger: 'rgb(var(--c-red) / <alpha-value>)',
+        info: 'rgb(var(--c-blue) / <alpha-value>)',
       },
       fontFamily: {
-        display: ['"Inter"', 'system-ui', 'sans-serif'],
         sans: ['"Inter"', 'system-ui', '-apple-system', '"Segoe UI"', '"PingFang SC"', '"Microsoft YaHei"', 'sans-serif'],
+        display: ['"Inter"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'monospace'],
       },
       fontSize: {
@@ -48,105 +64,33 @@ export default {
         DEFAULT: '150ms', fast: '80ms', slow: '300ms',
       },
       boxShadow: {
-        'card': '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02)',
-        'card-hover': '0 4px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)',
-        'node': '0 1px 3px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
-        'node-selected': '0 0 0 2px #6366f1, 0 4px 12px rgba(99,102,241,0.12)',
-        'glass': '0 2px 8px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.04)',
-        'modal': '0 20px 60px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.06)',
+        card: 'var(--shadow-card)',
+        'card-hover': 'var(--shadow-card-hover)',
+        node: 'var(--shadow-node)',
+        'node-selected': '0 0 0 2px rgb(var(--c-accent) / 0.9), var(--shadow-card-hover)',
+        glass: 'var(--shadow-glass)',
+        modal: 'var(--shadow-modal)',
+        pop: 'var(--shadow-pop)',
       },
       keyframes: {
-        'fade-up': { '0%': { opacity:'0', transform:'translateY(6px)' }, '100%': { opacity:'1', transform:'translateY(0)' } },
-        'fade-in': { '0%': { opacity:'0' }, '100%': { opacity:'1' } },
-        'slide-l': { '0%': { opacity:'0', transform:'translateX(-8px)' }, '100%': { opacity:'1', transform:'translateX(0)' } },
-        'slide-r': { '0%': { opacity:'0', transform:'translateX(8px)' }, '100%': { opacity:'1', transform:'translateX(0)' } },
-        'breathe': { '0%,100%': { opacity:'1' }, '50%': { opacity:'0.4' } },
-        'pulse-ring': { '0%': { boxShadow:'0 0 0 0 rgba(245,158,11,0.3)' }, '70%': { boxShadow:'0 0 0 4px rgba(245,158,11,0)' }, '100%': { boxShadow:'0 0 0 0 rgba(245,158,11,0)' } },
+        'fade-up': { '0%': { opacity: '0', transform: 'translateY(6px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+        'fade-in': { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+        'slide-l': { '0%': { opacity: '0', transform: 'translateX(-8px)' }, '100%': { opacity: '1', transform: 'translateX(0)' } },
+        'slide-r': { '0%': { opacity: '0', transform: 'translateX(8px)' }, '100%': { opacity: '1', transform: 'translateX(0)' } },
+        'scale-in': { '0%': { opacity: '0', transform: 'scale(0.96)' }, '100%': { opacity: '1', transform: 'scale(1)' } },
+        breathe: { '0%,100%': { opacity: '1' }, '50%': { opacity: '0.4' } },
+        'pulse-ring': { '0%': { boxShadow: '0 0 0 0 rgb(var(--c-accent) / 0.35)' }, '70%': { boxShadow: '0 0 0 6px rgb(var(--c-accent) / 0)' }, '100%': { boxShadow: '0 0 0 0 rgb(var(--c-accent) / 0)' } },
+        shimmer: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
       },
       animation: {
         'fade-up': 'fade-up 200ms ease-out',
         'fade-in': 'fade-in 150ms ease-out',
         'slide-l': 'slide-l 200ms ease-out',
         'slide-r': 'slide-r 200ms ease-out',
-        'breathe': 'breathe 2s ease-in-out infinite',
+        'scale-in': 'scale-in 160ms ease-out',
+        breathe: 'breathe 2s ease-in-out infinite',
         'pulse-ring': 'pulse-ring 2s ease-in-out infinite',
-      },
-    },
-  },
-  plugins: [],
-}
-/** @type {import('tailwindcss').Config} */
-export default {
-  content: ['./src/**/*.{ts,tsx}', './index.html'],
-  darkMode: 'class',
-  theme: {
-    extend: {
-      colors: {
-        // Warm Precision 四层体系
-        ink:      '#e8e4de',   // 窗口最深层 / 暖灰
-        base:     '#f5f2ed',   // 画布背景 / 暖象牙
-        panel:    '#faf8f5',   // 侧栏 / 工具栏 / 日志面板
-        card:     '#ffffff',   // 卡片 / 输入框
-        overlay:  '#ede9e3',   // 悬停 / 凹陷
-        border:   '#e2ddd6',   // 暖发丝描边
-        'border-light': '#ece8e2',
-
-        // 强调色 — 琥珀铜 (burnt amber)
-        accent:   '#b45309',
-        'accent-muted': '#92400e',
-        'accent-light': '#fef3c7',
-
-        // 节点功能色（暖底可读）
-        'sig-blue':   '#2563eb',
-        'sig-green':  '#059669',
-        'sig-amber':  '#d97706',
-        'sig-purple': '#7c3aed',
-        'sig-red':    '#dc2626',
-
-        // 文字（stone 暖灰阶）
-        't-primary':   '#1c1917',
-        't-secondary': '#57534e',
-        't-muted':     '#a8a29e',
-        't-faint':     '#d6d3d1',
-      },
-      fontFamily: {
-        display: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
-        sans: ['system-ui', '-apple-system', '"Segoe UI"', '"PingFang SC"', '"Microsoft YaHei"', 'sans-serif'],
-        mono: ['"JetBrains Mono"', '"SF Mono"', '"Fira Code"', 'monospace'],
-      },
-      fontSize: {
-        '3xs': ['0.625rem', { lineHeight: '0.85rem', letterSpacing: '0.04em' }],
-        '2xs': ['0.6875rem', { lineHeight: '0.95rem', letterSpacing: '0.02em' }],
-      },
-      borderRadius: {
-        DEFAULT: '6px', sm: '4px', md: '8px', lg: '10px', xl: '14px', '2xl': '18px',
-      },
-      transitionDuration: {
-        DEFAULT: '150ms', fast: '80ms', slow: '300ms',
-      },
-      boxShadow: {
-        'card': '0 1px 2px rgba(28,25,23,0.04), 0 0 0 1px rgba(28,25,23,0.04)',
-        'card-hover': '0 4px 12px rgba(28,25,23,0.08), 0 0 0 1px rgba(28,25,23,0.06)',
-        'node': '0 1px 3px rgba(28,25,23,0.06), 0 0 0 1px rgba(28,25,23,0.05)',
-        'node-selected': '0 0 0 2px #b45309, 0 4px 12px rgba(180,83,9,0.12)',
-        'glass': '0 2px 8px rgba(28,25,23,0.06), 0 0 0 1px rgba(28,25,23,0.04)',
-        'press': 'inset 0 1px 3px rgba(28,25,23,0.1)',
-      },
-      keyframes: {
-        'fade-up': { '0%': { opacity:'0', transform:'translateY(4px)' }, '100%': { opacity:'1', transform:'translateY(0)' } },
-        'fade-in': { '0%': { opacity:'0' }, '100%': { opacity:'1' } },
-        'slide-l': { '0%': { opacity:'0', transform:'translateX(-8px)' }, '100%': { opacity:'1', transform:'translateX(0)' } },
-        'slide-r': { '0%': { opacity:'0', transform:'translateX(8px)' }, '100%': { opacity:'1', transform:'translateX(0)' } },
-        'breathe': { '0%,100%': { opacity:'1' }, '50%': { opacity:'0.4' } },
-        'glow': { '0%,100%': { boxShadow:'0 0 0 0 rgba(5,150,105,0.2)' }, '50%': { boxShadow:'0 0 0 4px rgba(5,150,105,0)' } },
-      },
-      animation: {
-        'fade-up': 'fade-up 200ms ease-out',
-        'fade-in': 'fade-in 180ms ease-out',
-        'slide-l': 'slide-l 200ms ease-out',
-        'slide-r': 'slide-r 200ms ease-out',
-        'breathe': 'breathe 2s ease-in-out infinite',
-        'glow': 'glow 2s ease-in-out infinite',
+        shimmer: 'shimmer 1.6s linear infinite',
       },
     },
   },

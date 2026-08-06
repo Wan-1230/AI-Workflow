@@ -1,4 +1,5 @@
 import type { WorkflowNode, ExecutionContext, NodeResult, RetryConfig } from '@shared/workflow'
+import type { NodeExecuteFn } from '@shared/node'
 import { nodeRegistry } from '../nodes'
 
 const DEFAULT_TIMEOUT = 30000 // 30秒默认超时
@@ -6,10 +7,9 @@ const DEFAULT_TIMEOUT = 30000 // 30秒默认超时
 /**
  * 节点执行器
  * - 根据节点类型查找注册的处理器
- * - 支持变量插值
- * - 支持超时控制
- * - 支持自动重试
- * - 支持取消信号
+ * - 支持变量插值（{{nodeId.field}} / {{credentials.KEY}} / {{env.VAR}} / {{global.KEY}} / 内置函数）
+ * - 支持超时控制 / 自动重试 / 取消信号
+ * - 注入全局变量、模型运行时信息、流式输出回调
  */
 export class Executor {
   async executeNode(
@@ -37,7 +37,7 @@ export class Executor {
    */
   private async executeWithRetry(
     node: WorkflowNode,
-    executeFn: (ctx: any) => Promise<Record<string, unknown>>,
+    executeFn: NodeExecuteFn,
     context: ExecutionContext,
     inputs: Record<string, unknown>,
     timeout: number,
@@ -84,21 +84,28 @@ export class Executor {
    */
   private async executeWithTimeout(
     node: WorkflowNode,
-    executeFn: (ctx: any) => Promise<Record<string, unknown>>,
+    executeFn: NodeExecuteFn,
     context: ExecutionContext,
     inputs: Record<string, unknown>,
     timeout: number
   ): Promise<Record<string, unknown>> {
-    // 解析配置中的模板变量 {{nodeId.field}}
+    // 解析配置中的模板变量 {{nodeId.field}} / {{global.KEY}} 等
     const resolvedConfig = this.resolveTemplates(node.config, context)
 
-    // 构建节点执行上下文
+    // 构建节点执行上下文：注入变量 / 模型 / 流式回调
     const nodeContext = {
       config: resolvedConfig,
       inputs,
       secrets: context.secrets,
+      variables: context.variables,
+      models: context.models,
       signal: context.signal,
-      logger: (msg: string) => context.logger(node.id, msg)
+      logger: (msg: string) => context.logger(node.id, msg),
+      stream: context.stream
+        ? (chunk: Parameters<NonNullable<typeof context.stream>>[0]) => {
+            context.stream!({ ...chunk, nodeId: node.id, timestamp: Date.now() })
+          }
+        : undefined
     }
 
     // 创建超时 Promise
@@ -172,36 +179,42 @@ export class Executor {
     return value.replace(/\{\{([^}]+)\}\}/g, (_match, expr: string) => {
       const trimmed = expr.trim()
 
-      // 1. 凭证引用: {{credentials.KEY}}
+      // 1. 全局变量引用: {{global.KEY}}（variable-set 节点写入，跨节点传递）
+      if (trimmed.startsWith('global.')) {
+        const key = trimmed.slice('global.'.length)
+        return context.variables[key] ?? `{{${trimmed}}}`
+      }
+
+      // 2. 凭证引用: {{credentials.KEY}}
       if (trimmed.startsWith('credentials.')) {
         const key = trimmed.slice('credentials.'.length)
         return context.secrets[key] ?? `{{${trimmed}}}`
       }
 
-      // 2. 环境变量: {{env.VAR}}
+      // 3. 环境变量: {{env.VAR}}
       if (trimmed.startsWith('env.')) {
         const varName = trimmed.slice('env.'.length)
         return process.env[varName] ?? `{{${trimmed}}}`
       }
 
-      // 3. 内置函数: {{json(nodeId.path)}}
+      // 4. 内置函数: {{json(nodeId.path)}}
       const jsonMatch = trimmed.match(/^json\((.+)\)$/)
       if (jsonMatch) {
         const inner = this.resolveExpression(jsonMatch[1], context)
         return JSON.stringify(inner, null, 2)
       }
 
-      // 4. 内置函数: {{now()}}
+      // 5. 内置函数: {{now()}}
       if (trimmed === 'now()') {
         return new Date().toISOString()
       }
 
-      // 5. 内置函数: {{timestamp()}}
+      // 6. 内置函数: {{timestamp()}}
       if (trimmed === 'timestamp()') {
         return String(Date.now())
       }
 
-      // 6. 内置函数: {{length(nodeId.path)}}
+      // 7. 内置函数: {{length(nodeId.path)}}
       const lengthMatch = trimmed.match(/^length\((.+)\)$/)
       if (lengthMatch) {
         const inner = this.resolveExpression(lengthMatch[1], context)
@@ -211,7 +224,7 @@ export class Executor {
         return '0'
       }
 
-      // 7. 普通节点输出引用: {{nodeId}} 或 {{nodeId.path.to.value}}
+      // 8. 普通节点输出引用: {{nodeId}} 或 {{nodeId.path.to.value}}
       return this.resolveNodeReference(trimmed, context)
     })
   }

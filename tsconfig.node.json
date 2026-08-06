@@ -9,7 +9,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["packages/shared/src/*"]
+    }
   },
-  "include": ["electron/**/*", "vite.config.ts", "electron-builder.yml"]
+  "include": ["electron/**/*", "packages/**/*", "vite.config.ts", "electron-builder.yml"]
 }
