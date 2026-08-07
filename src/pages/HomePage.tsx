@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FolderPlus, Copy, Pencil, Trash2, Play, Layers, Share2, FolderOpen, Clock } from 'lucide-react'
+import { FolderPlus, Copy, Pencil, Trash2, Play, Layers, Share2, Clock } from 'lucide-react'
 import { Button, Modal, ConfirmDialog, Input, Textarea, EmptyState, Spinner, Badge } from '../components/ui'
 import { useAppStore } from '../stores/app-store'
 import { useWorkflowStore } from '../stores/workflow-store'
@@ -164,10 +164,8 @@ export function HomePage() {
           <div className="flex items-center justify-center py-24"><Spinner label="加载项目中..." /></div>
         ) : projects.length === 0 ? (
           <EmptyState
-            icon={<FolderOpen />}
-            title="还没有项目"
-            description="创建第一个工作流项目：从空白画布开始，或使用示例模板快速上手。"
-            action={<Button variant="primary" icon={<FolderPlus size={15} />} onClick={() => setCreateOpen(true)}>新建项目</Button>}
+            title="暂无项目"
+            description="点击右上角「新建项目」，开始编排你的第一个工作流。"
           />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -220,7 +218,7 @@ export function HomePage() {
 
         {/* 底部提示 */}
         <p className="text-center text-2xs text-fg-faint mt-8">
-          数据保存在本地 · 支持 JSON 导入导出 · 所有执行记录持久化
+          数据保存在本地 · 支持 JSON 导入导出
         </p>
       </div>
 

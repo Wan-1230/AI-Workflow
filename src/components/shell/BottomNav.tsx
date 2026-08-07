@@ -33,7 +33,7 @@ export function BottomNav() {
   }
 
   return (
-    <div className="h-14 shrink-0 border-t border-line bg-app/90 backdrop-blur flex items-center justify-center px-4 select-none">
+    <div className="h-12 shrink-0 bg-app flex items-center justify-center px-4 select-none">
       <Tabs<AppView>
         items={items}
         value={view === 'editor' ? 'editor' : view}

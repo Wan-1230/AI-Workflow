@@ -7,6 +7,28 @@ import type { AppSettings, AppSettingsInput } from '@shared/settings'
 
 // 暴露给渲染进程的 API
 contextBridge.exposeInMainWorld('api', {
+  // ===== 自绘标题栏：窗口控制 =====
+  windowControls: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('window:toggleMaximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    onMaximizedChange: (callback: (maximized: boolean) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized)
+      ipcRenderer.on('window:maximized', handler)
+      return () => ipcRenderer.removeListener('window:maximized', handler)
+    }
+  },
+
+  // ===== 视图操作（原原生菜单「视图」） =====
+  appActions: {
+    reload: () => ipcRenderer.invoke('app:reload'),
+    toggleDevTools: () => ipcRenderer.invoke('app:devtools'),
+    zoomIn: () => ipcRenderer.invoke('app:zoomIn'),
+    zoomOut: () => ipcRenderer.invoke('app:zoomOut'),
+    resetZoom: () => ipcRenderer.invoke('app:resetZoom')
+  },
+
   // 执行工作流
   executeWorkflow: (wf: WorkflowDefinition) =>
     ipcRenderer.invoke('workflow:execute', wf),
@@ -44,7 +66,7 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('execution:update', handler)
   },
 
-  // 菜单事件监听
+  // 菜单事件监听（保留兼容，原生菜单已移除）
   onMenuEvent: (callback: (action: string) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, action: string) => callback(action)
     ipcRenderer.on('menu:event', handler)

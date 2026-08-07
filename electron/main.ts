@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, Menu, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage } from 'electron'
 import { join } from 'path'
 import { WorkflowEngine } from './engine'
 import { validateWorkflow } from './engine/validator'
@@ -33,14 +33,23 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 680,
     title: 'AI Workflow',
-    backgroundColor: '#f8fafc',
-    titleBarStyle: 'hiddenInset',
+    backgroundColor: '#f5f7fa',
+    // 隐藏系统标题栏与窗口按钮，由渲染进程自绘标题栏（Codex 风格一体化）
+    titleBarStyle: 'hidden',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
     }
+  })
+
+  // 最大化状态变化推送（供自绘标题栏切换按钮图标）
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send('window:maximized', true)
+  })
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send('window:maximized', false)
   })
 
   // 开发模式加载 localhost，生产模式加载文件
@@ -61,77 +70,61 @@ function createWindow() {
 }
 
 // ===== 应用菜单 =====
+// 原生菜单栏已移除，所有菜单能力迁移到渲染进程自绘标题栏的汉堡菜单
 
 function setupMenu() {
-  const menuTemplate: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: '文件',
-      submenu: [
-        {
-          label: '新建工作流',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => mainWindow?.webContents.send('menu:event', 'new')
-        },
-        {
-          label: '打开...',
-          accelerator: 'CmdOrCtrl+O',
-          click: () => mainWindow?.webContents.send('menu:event', 'open')
-        },
-        {
-          label: '保存',
-          accelerator: 'CmdOrCtrl+S',
-          click: () => mainWindow?.webContents.send('menu:event', 'save')
-        },
-        { type: 'separator' },
-        { role: 'quit', label: '退出' }
-      ]
-    },
-    {
-      label: '编辑',
-      submenu: [
-        { role: 'undo', label: '撤销' },
-        { role: 'redo', label: '重做' },
-        { type: 'separator' },
-        { role: 'cut', label: '剪切' },
-        { role: 'copy', label: '复制' },
-        { role: 'paste', label: '粘贴' },
-        { role: 'selectAll', label: '全选' }
-      ]
-    },
-    {
-      label: '视图',
-      submenu: [
-        { role: 'reload', label: '刷新' },
-        { role: 'toggleDevTools', label: '开发者工具' },
-        { type: 'separator' },
-        { role: 'zoomIn', label: '放大' },
-        { role: 'zoomOut', label: '缩小' },
-        { role: 'resetZoom', label: '重置缩放' }
-      ]
-    },
-    {
-      label: '帮助',
-      submenu: [
-        {
-          label: '使用教程',
-          accelerator: 'F1',
-          click: () => mainWindow?.webContents.send('menu:event', 'help')
-        },
-        {
-          label: 'GitHub',
-          click: () => shell.openExternal('https://github.com')
-        }
-      ]
-    }
-  ]
-
-  const menu = Menu.buildFromTemplate(menuTemplate)
-  Menu.setApplicationMenu(menu)
+  Menu.setApplicationMenu(null)
 }
 
 // ===== IPC 处理 =====
 
 function setupIPC() {
+  // ===== 自绘标题栏：窗口控制 =====
+  ipcMain.handle('window:minimize', () => {
+    mainWindow?.minimize()
+  })
+
+  ipcMain.handle('window:toggleMaximize', () => {
+    if (!mainWindow) return false
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize()
+      return false
+    }
+    mainWindow.maximize()
+    return true
+  })
+
+  ipcMain.handle('window:close', () => {
+    mainWindow?.close()
+  })
+
+  ipcMain.handle('window:isMaximized', () => {
+    return mainWindow?.isMaximized() ?? false
+  })
+
+  // ===== 视图操作（原原生菜单「视图」迁移） =====
+  ipcMain.handle('app:reload', () => {
+    mainWindow?.webContents.reload()
+  })
+
+  ipcMain.handle('app:devtools', () => {
+    mainWindow?.webContents.toggleDevTools()
+  })
+
+  ipcMain.handle('app:zoomIn', () => {
+    const wc = mainWindow?.webContents
+    if (wc) wc.setZoomLevel((wc.getZoomLevel() || 0) + 0.5)
+  })
+
+  ipcMain.handle('app:zoomOut', () => {
+    const wc = mainWindow?.webContents
+    if (wc) wc.setZoomLevel((wc.getZoomLevel() || 0) - 0.5)
+  })
+
+  ipcMain.handle('app:resetZoom', () => {
+    mainWindow?.webContents.setZoomLevel(0)
+  })
+
   // 执行工作流
   ipcMain.handle('workflow:execute', async (_event, wf: WorkflowDefinition) => {
     try {

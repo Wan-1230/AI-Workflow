@@ -191,6 +191,17 @@ input:focus, textarea:focus, select:focus {
   border-radius: 8px;
 }
 
+/* ===== 自绘标题栏：可拖拽区域 ===== */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+.titlebar-drag:active {
+  cursor: grabbing;
+}
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 /* ===== 字体工具 ===== */
 .font-mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
 .font-display { font-family: 'Inter', system-ui, sans-serif; }

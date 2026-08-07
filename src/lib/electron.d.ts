@@ -5,6 +5,24 @@ import type { PromptTemplate, PromptTemplateInput, PromptRenderResult } from '@s
 import type { AppSettings, AppSettingsInput } from '@shared/settings'
 
 export interface ElectronAPI {
+  // ===== 自绘标题栏：窗口控制 =====
+  windowControls: {
+    minimize: () => Promise<void>
+    toggleMaximize: () => Promise<boolean>
+    close: () => Promise<void>
+    isMaximized: () => Promise<boolean>
+    onMaximizedChange: (callback: (maximized: boolean) => void) => () => void
+  }
+
+  // ===== 视图操作（原原生菜单「视图」） =====
+  appActions: {
+    reload: () => Promise<void>
+    toggleDevTools: () => Promise<void>
+    zoomIn: () => Promise<void>
+    zoomOut: () => Promise<void>
+    resetZoom: () => Promise<void>
+  }
+
   // 执行工作流
   executeWorkflow: (wf: WorkflowDefinition) => Promise<{ success: boolean; result?: Record<string, NodeResult>; error?: string }>
   cancelExecution: () => Promise<{ success: boolean; error?: string }>

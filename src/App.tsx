@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { ReactFlowProvider } from '@xyflow/react'
-import { TopBar } from './components/shell/TopBar'
+import { TitleBar } from './components/shell/TitleBar'
 import { BottomNav } from './components/shell/BottomNav'
 import { ToastViewport } from './components/ui/Toast'
 import { useAppStore } from './stores/app-store'
@@ -20,27 +20,10 @@ function App() {
     useThemeStore.getState().init()
   }, [])
 
-  // 监听原生菜单事件
-  useEffect(() => {
-    const unsub = window.api.onMenuEvent((action: string) => {
-      const app = useAppStore.getState()
-      if (action === 'new') {
-        app.setView('home')
-      } else if (action === 'open') {
-        app.setView('home')
-      } else if (action === 'save' && app.view === 'editor') {
-        // 编辑器内保存由 EditorPage 处理（经 TopBar 按钮）
-      } else if (action === 'help') {
-        app.setView('home')
-      }
-    })
-    return unsub
-  }, [])
-
   return (
     <ReactFlowProvider>
       <div className="h-screen w-screen flex flex-col bg-app text-fg overflow-hidden">
-        <TopBar />
+        <TitleBar />
         <main className="flex-1 flex flex-col overflow-hidden">
           {view === 'home' && <HomePage />}
           {view === 'editor' && <EditorPage />}

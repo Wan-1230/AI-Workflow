@@ -13,11 +13,14 @@ interface AppStore {
   projectsLoaded: boolean
   /** 是否正在保存（防止并发） */
   saving: boolean
+  /** 使用教程弹窗开关（标题栏帮助菜单 / 画布工具栏共用） */
+  helpOpen: boolean
 
   setView: (view: AppView) => void
   openProject: (project: ProjectSummary | null) => void
   setProjects: (projects: ProjectSummary[]) => void
   setSaving: (saving: boolean) => void
+  setHelpOpen: (open: boolean) => void
 
   /** 刷新项目列表（重新拉取） */
   refreshProjects: () => Promise<void>
@@ -31,11 +34,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
   projects: [],
   projectsLoaded: false,
   saving: false,
+  helpOpen: false,
 
   setView: view => set({ view }),
   openProject: project => set({ currentProject: project, view: project ? 'editor' : 'home' }),
   setProjects: projects => set({ projects, projectsLoaded: true }),
   setSaving: saving => set({ saving }),
+  setHelpOpen: open => set({ helpOpen: open }),
 
   refreshProjects: async () => {
     try {

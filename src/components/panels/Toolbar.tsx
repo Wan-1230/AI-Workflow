@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Undo2, Redo2, LayoutGrid, Download, Upload, Trash2, Play, Square, HelpCircle, Variable } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useAppStore } from '../../stores/app-store'
 import { IconButton, Button, ConfirmDialog } from '../ui'
 import { toast } from '../../stores/toast-store'
 import { HelpTutorial } from './HelpTutorial'
@@ -19,9 +20,12 @@ export function Toolbar() {
     toWorkflowJSONString, loadWorkflow
   } = useWorkflowStore()
 
-  const [showHelp, setShowHelp] = useState(false)
   const [showVars, setShowVars] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
+
+  // 帮助教程弹窗状态提升到全局（标题栏汉堡菜单共用）
+  const helpOpen = useAppStore(s => s.helpOpen)
+  const setHelpOpen = useAppStore(s => s.setHelpOpen)
 
   const isRunning = execution.status === 'running'
 
@@ -101,7 +105,7 @@ export function Toolbar() {
         <IconButton tooltip="全局变量（{{global.KEY}} 引用）" onClick={() => setShowVars(true)}>
           <Variable size={14} />
         </IconButton>
-        <IconButton tooltip="快捷键与帮助" onClick={() => setShowHelp(true)}>
+        <IconButton tooltip="快捷键与帮助" onClick={() => setHelpOpen(true)}>
           <HelpCircle size={14} />
         </IconButton>
       </div>
@@ -126,7 +130,7 @@ export function Toolbar() {
       </div>
 
       {/* 弹窗 */}
-      <HelpTutorial open={showHelp} onClose={() => setShowHelp(false)} />
+      <HelpTutorial open={helpOpen} onClose={() => setHelpOpen(false)} />
       <GlobalVariablesModal open={showVars} onClose={() => setShowVars(false)} />
       <ConfirmDialog
         open={confirmClear}
