@@ -55,7 +55,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '手动触发',
     description: '点击运行按钮启动工作流',
     category: 'trigger',
-    color: '#5b9cf5',
+    color: '#86909C',
     icon: '⚡',
     defaultConfig: {},
     fields: [],
@@ -68,7 +68,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: 'HTTP 请求',
     description: '发送 HTTP 请求（GET / POST / PUT / DELETE）',
     category: 'action',
-    color: '#4cc38a',
+    color: '#00B42A',
     icon: '🌐',
     defaultConfig: {
       url: 'https://api.github.com/zen',
@@ -96,7 +96,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '代码执行',
     description: '在沙箱中执行 JavaScript，输入在 input 变量，用 return 返回',
     category: 'action',
-    color: '#4cc38a',
+    color: '#00B42A',
     icon: '💻',
     defaultConfig: {
       code: '// 输入数据在 input 变量中\n// 用 return 返回结果\nconst result = input;\nreturn { result };'
@@ -114,7 +114,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '通知输出',
     description: '在工作流日志中输出通知消息',
     category: 'action',
-    color: '#4cc38a',
+    color: '#00B42A',
     icon: '🔔',
     defaultConfig: {
       message: '工作流执行完成！',
@@ -136,7 +136,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '文本处理',
     description: '替换/拆分/切片/正则等文本操作',
     category: 'action',
-    color: '#4cc38a',
+    color: '#722ED1',
     icon: '✂️',
     defaultConfig: {
       text: '',
@@ -173,7 +173,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '文件读写',
     description: '读取或写入本地文件',
     category: 'action',
-    color: '#4cc38a',
+    color: '#86909C',
     icon: '📄',
     defaultConfig: {
       mode: 'read',
@@ -205,7 +205,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '条件分支',
     description: '根据条件判断路由到不同分支（True/False）',
     category: 'logic',
-    color: '#d4a83c',
+    color: '#FF7D00',
     icon: '🔀',
     defaultConfig: {
       left: '{{input}}',
@@ -227,7 +227,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '循环',
     description: '对数组逐项渲染模板，输出结果数组',
     category: 'logic',
-    color: '#d4a83c',
+    color: '#FF7D00',
     icon: '🔁',
     defaultConfig: {
       itemsSource: '{{input}}',
@@ -252,7 +252,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '变量设置',
     description: '写入全局变量，后续节点用 {{global.KEY}} 引用',
     category: 'logic',
-    color: '#d4a83c',
+    color: '#FF7D00',
     icon: '📌',
     defaultConfig: {
       key: 'myVar',
@@ -272,7 +272,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '子工作流',
     description: '嵌套执行内嵌的子工作流 JSON',
     category: 'logic',
-    color: '#d4a83c',
+    color: '#FF7D00',
     icon: '📂',
     defaultConfig: {
       workflowJson: '{}',
@@ -294,7 +294,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: 'LLM 调用',
     description: '调用大模型（OpenAI 兼容接口，支持流式输出）',
     category: 'ai',
-    color: '#8b5cf6',
+    color: '#165DFF',
     icon: '🤖',
     defaultConfig: {
       modelId: '',
@@ -324,7 +324,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '提示词模板',
     description: '渲染模板并输出文本，可用于拼装复杂提示词',
     category: 'ai',
-    color: '#8b5cf6',
+    color: '#722ED1',
     icon: '📝',
     defaultConfig: {
       template: '请帮我总结以下内容：\n{{input.text}}',
@@ -347,7 +347,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '工具调用',
     description: '调用内置工具或 MCP 服务器工具',
     category: 'agent',
-    color: '#e85d5d',
+    color: '#00B42A',
     icon: '🛠️',
     defaultConfig: {
       toolType: 'builtin',
@@ -383,7 +383,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '子 Agent 委派',
     description: '以指定角色委派 LLM 完成子任务',
     category: 'agent',
-    color: '#e85d5d',
+    color: '#3491FA',
     icon: '🧠',
     defaultConfig: {
       task: '请分析以下数据并给出结论',
@@ -414,7 +414,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '文档入库',
     description: '文本/文件切分向量化，写入本地向量库',
     category: 'rag',
-    color: '#06b6d4',
+    color: '#0FC6C2',
     icon: '📚',
     defaultConfig: {
       source: 'text',
@@ -446,7 +446,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     displayName: '向量检索',
     description: '按语义相似度从向量库检索相关内容',
     category: 'rag',
-    color: '#06b6d4',
+    color: '#0FC6C2',
     icon: '🎯',
     defaultConfig: {
       query: '',
@@ -469,12 +469,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
 
 // ===== 分类组织（供节点面板渲染） =====
 export const nodeCategories: { category: NodeCategory; label: string; color: string; nodes: UINodeDefinition[] }[] = [
-  { category: 'trigger', label: '触发器', color: '#5b9cf5', nodes: [] },
-  { category: 'action', label: '动作', color: '#4cc38a', nodes: [] },
-  { category: 'logic', label: '逻辑', color: '#d4a83c', nodes: [] },
-  { category: 'ai', label: 'AI 节点', color: '#8b5cf6', nodes: [] },
-  { category: 'agent', label: 'Agent', color: '#e85d5d', nodes: [] },
-  { category: 'rag', label: 'RAG', color: '#06b6d4', nodes: [] }
+  { category: 'trigger', label: '输入输出', color: '#86909C', nodes: [] },
+  { category: 'action', label: '工具动作', color: '#00B42A', nodes: [] },
+  { category: 'logic', label: '流程控制', color: '#FF7D00', nodes: [] },
+  { category: 'ai', label: '大模型', color: '#165DFF', nodes: [] },
+  { category: 'agent', label: 'Agent', color: '#3491FA', nodes: [] },
+  { category: 'rag', label: 'RAG', color: '#0FC6C2', nodes: [] }
 ]
 
 for (const def of Object.values(nodeDefinitions)) {

@@ -41,6 +41,7 @@ export default {
         'sig-purple': 'rgb(var(--c-purple) / <alpha-value>)',
         'sig-red': 'rgb(var(--c-red) / <alpha-value>)',
         'sig-cyan': 'rgb(var(--c-cyan) / <alpha-value>)',
+        'sig-gray': 'rgb(var(--c-gray) / <alpha-value>)',
 
         // 语义状态
         success: 'rgb(var(--c-green) / <alpha-value>)',
@@ -58,7 +59,8 @@ export default {
         '2xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.01em' }],
       },
       borderRadius: {
-        DEFAULT: '8px', sm: '6px', md: '10px', lg: '12px', xl: '16px', '2xl': '20px',
+        // 规范：常规组件 6px / 卡片节点 8px / 弹窗大卡片 12px
+        DEFAULT: '8px', sm: '6px', md: '10px', lg: '12px', xl: '12px', '2xl': '16px',
       },
       transitionDuration: {
         DEFAULT: '150ms', fast: '80ms', slow: '300ms',

@@ -14,82 +14,90 @@
    颜色以 RGB 三元组存储，配合 Tailwind `rgb(var() / <alpha-value>)` 使用
    ===================================================================== */
 :root {
-  /* 表面层级 */
-  --c-app: 241 245 249;      /* slate-100 窗口最深层 */
-  --c-surface: 255 255 255;  /* 面板 / 侧栏 */
-  --c-raised: 255 255 255;   /* 卡片 / 输入框 */
-  --c-overlay: 241 245 249;  /* 悬停 / 凹陷 */
-  --c-canvas: 248 250 252;   /* 画布背景 */
+  /* 表面层级（Arco 灰阶体系） */
+  --c-app: 245 247 250;      /* #F5F7FA 窗口最深层 */
+  --c-surface: 255 255 255;  /* #FFFFFF 面板 / 侧栏 */
+  --c-raised: 255 255 255;   /* #FFFFFF 卡片 / 输入框 */
+  --c-overlay: 242 243 245;  /* #F2F3F5 悬停 / 凹陷 */
+  --c-canvas: 247 248 250;   /* #F7F8FA 画布背景 */
 
   /* 描边 */
-  --c-line: 226 232 240;         /* slate-200 */
-  --c-line-strong: 203 213 225;  /* slate-300 */
+  --c-line: 229 230 235;         /* #E5E6EB */
+  --c-line-strong: 201 205 212;  /* #C9CDD4 */
 
   /* 文字 */
-  --c-fg: 15 23 42;          /* slate-900 */
-  --c-fg-secondary: 71 85 105;   /* slate-500 */
-  --c-fg-muted: 148 163 184;     /* slate-400 */
-  --c-fg-faint: 203 213 225;     /* slate-300 */
+  --c-fg: 29 33 41;              /* #1D2129 */
+  --c-fg-secondary: 78 89 105;   /* #4E5969 */
+  --c-fg-muted: 134 144 156;     /* #86909C */
+  --c-fg-faint: 201 205 212;     /* #C9CDD4 */
   --c-fg-inverse: 255 255 255;
 
-  /* 强调色 — Indigo */
-  --c-accent: 99 102 241;        /* indigo-500 */
-  --c-accent-strong: 79 70 229;  /* indigo-600 */
-  --c-accent-soft: 238 242 255;  /* indigo-50 */
+  /* 强调色 — 品牌蓝 Arco Blue */
+  --c-accent: 22 93 255;         /* #165DFF */
+  --c-accent-strong: 14 66 210;  /* #0E42D2 按压态 */
+  --c-accent-soft: 232 243 255;  /* #E8F3FF 激活浅底 */
   --c-accent-fg: 255 255 255;
 
-  /* 节点功能色 */
-  --c-blue: 59 130 246;
-  --c-green: 34 197 94;
-  --c-amber: 245 158 11;
-  --c-purple: 139 92 246;
-  --c-red: 239 68 68;
-  --c-cyan: 6 182 212;
+  /* 节点功能色 / 状态色（低饱和专业色） */
+  --c-blue: 22 93 255;       /* #165DFF 大模型 */
+  --c-green: 0 180 42;       /* #00B42A 工具调用 / 成功 */
+  --c-amber: 255 125 0;      /* #FF7D00 流程控制 / 警告 */
+  --c-purple: 114 46 209;    /* #722ED1 提示词 / 文本 */
+  --c-red: 245 63 63;        /* #F53F3F 错误 */
+  --c-cyan: 15 198 194;      /* #0FC6C2 RAG */
+  --c-gray: 134 144 156;     /* #86909C 输入输出 */
 
-  /* 阴影 */
-  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
-  --shadow-card-hover: 0 4px 14px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.05);
-  --shadow-node: 0 1px 3px rgba(15, 23, 42, 0.07), 0 0 0 1px rgba(15, 23, 42, 0.05);
-  --shadow-glass: 0 2px 8px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.04);
-  --shadow-modal: 0 20px 60px rgba(15, 23, 42, 0.16), 0 4px 16px rgba(15, 23, 42, 0.08);
-  --shadow-pop: 0 8px 30px rgba(15, 23, 42, 0.12);
+  /* 节点状态色别名（供内联 style 直接引用完整色值） */
+  --c-sig-blue: rgb(var(--c-blue));
+  --c-sig-green: rgb(var(--c-green));
+  --c-sig-amber: rgb(var(--c-amber));
+  --c-sig-red: rgb(var(--c-red));
+
+  /* 阴影（规范：轻 0 2px 8px / 重 0 4px 16px） */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-node: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-glass: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
 /* ============ 深色主题 ============ */
 .dark {
-  --c-app: 8 10 20;          /* 窗口最深层 */
-  --c-surface: 15 20 36;     /* 面板 / 侧栏 */
-  --c-raised: 22 28 48;      /* 卡片 / 输入框 */
-  --c-overlay: 30 37 60;     /* 悬停 / 凹陷 */
-  --c-canvas: 11 14 26;      /* 画布背景 */
+  --c-app: 15 16 20;         /* #0F1014 窗口最深层 */
+  --c-surface: 28 29 35;     /* #1C1D23 面板 / 侧栏 */
+  --c-raised: 35 36 43;      /* #23242B 卡片 / 输入框 */
+  --c-overlay: 42 43 51;     /* #2A2B33 悬停 / 凹陷 */
+  --c-canvas: 19 20 25;      /* #131419 画布背景 */
 
-  --c-line: 33 41 66;
-  --c-line-strong: 47 57 88;
+  --c-line: 46 47 56;
+  --c-line-strong: 58 60 70;
 
-  --c-fg: 238 242 250;
-  --c-fg-secondary: 148 163 190;
-  --c-fg-muted: 100 116 145;
-  --c-fg-faint: 63 74 102;
-  --c-fg-inverse: 15 23 42;
+  --c-fg: 242 243 245;           /* #F2F3F5 */
+  --c-fg-secondary: 169 174 184; /* #A9AEB8 */
+  --c-fg-muted: 134 144 156;     /* #86909C */
+  --c-fg-faint: 78 89 105;       /* #4E5969 */
+  --c-fg-inverse: 15 16 20;
 
-  --c-accent: 129 140 248;       /* indigo-400 */
-  --c-accent-strong: 99 102 241;
-  --c-accent-soft: 34 38 66;
-  --c-accent-fg: 15 23 42;
+  --c-accent: 64 128 255;        /* #4080FF 深色下提亮保证对比度 */
+  --c-accent-strong: 22 93 255;  /* #165DFF */
+  --c-accent-soft: 32 45 74;     /* 品牌蓝深色浅底 */
+  --c-accent-fg: 255 255 255;
 
-  --c-blue: 96 165 250;
-  --c-green: 74 222 128;
-  --c-amber: 251 191 36;
-  --c-purple: 167 139 250;
-  --c-red: 248 113 113;
-  --c-cyan: 34 211 238;
+  --c-blue: 60 126 255;      /* #3C7EFF */
+  --c-green: 35 195 67;      /* #23C343 */
+  --c-amber: 255 150 60;     /* #FF963C */
+  --c-purple: 144 87 250;    /* #9057FA */
+  --c-red: 247 96 96;        /* #F76060 */
+  --c-cyan: 29 198 215;      /* #1DC6D7 */
+  --c-gray: 134 144 156;
 
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-node: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-glass: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
-  --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --shadow-node: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-glass: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-modal: 0 4px 16px rgba(0, 0, 0, 0.55);
+  --shadow-pop: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 /* =====================================================================
