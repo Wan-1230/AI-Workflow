@@ -129,8 +129,9 @@ export function runMigrations(
 
       let backupDir: string | null = null
       if (m.destructive) {
+        // 时间戳进目录名，避免同名迁移的备份互相覆盖
         const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-        backupDir = join(userData, 'backups', `v${m.version}-${m.name}`, '')
+        backupDir = join(userData, 'backups', `v${m.version}-${m.name}-${stamp}`, '')
         ensureDir(backupDir)
         for (const db of m.databases) {
           const file = join(userData, LEGACY_FILES[db])

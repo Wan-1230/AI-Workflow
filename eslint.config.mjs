@@ -20,6 +20,14 @@ export default tseslint.config(
     }
   },
   {
+    // 主进程与引擎：stdout 是桌面应用唯一的启动期诊断通道（用户报障时索取的日志），
+    // 这里放行 console.log，渲染层仍保持告警。
+    files: ['src/main/**/*.{ts,tsx}', 'electron/**/*.ts'],
+    rules: {
+      'no-console': 'off'
+    }
+  },
+  {
     // Node 侧 CommonJS 脚本：允许 require / process / console 等全局量。
     // 必须排在通用 rules 块之后 —— flat config 中后者覆盖前者，否则 no-console: off 不生效。
     files: ['**/*.cjs', '**/*.mjs', '*.config.js', 'postcss.config.js'],

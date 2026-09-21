@@ -66,7 +66,9 @@ export class CredentialManager {
    * 获取凭证（解密）
    */
   get(key: string): string | null {
-    const row = this.db.prepare('SELECT encrypted_value FROM credentials WHERE key = ?').get(key) as any
+    const row = this.db.prepare('SELECT encrypted_value FROM credentials WHERE key = ?').get(key) as
+      | { encrypted_value: Buffer }
+      | undefined
     if (!row) return null
 
     try {
@@ -81,7 +83,7 @@ export class CredentialManager {
    * 用于注入到执行上下文的 secrets 中
    */
   getAll(): Record<string, string> {
-    const rows = this.db.prepare('SELECT key, encrypted_value FROM credentials').all() as any[]
+    const rows = this.db.prepare('SELECT key, encrypted_value FROM credentials').all() as Array<{ key: string; encrypted_value: Buffer }>
     const result: Record<string, string> = {}
 
     for (const row of rows) {
@@ -101,7 +103,7 @@ export class CredentialManager {
   list(): CredentialEntry[] {
     const rows = this.db.prepare(
       'SELECT key, display_name, created_at, updated_at FROM credentials ORDER BY updated_at DESC'
-    ).all() as any[]
+    ).all() as Array<{ key: string; display_name: string; created_at: string; updated_at: string }>
 
     return rows.map(row => ({
       key: row.key,

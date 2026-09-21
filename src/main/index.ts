@@ -11,7 +11,7 @@ import { SettingsStore } from '../../electron/engine/storage/settings'
 import { workflowTemplates } from '../../electron/engine/templates'
 import { runMigrations, MigrationError, type MigrationReport } from './db/index'
 import { migrations } from './db/migrations'
-import { findSecretPaths, redactSecrets, scanWorkflowSecrets } from '../../electron/engine/secrets-guard'
+import { redactSecrets, scanWorkflowSecrets } from '../../electron/engine/secrets-guard'
 import type { WorkflowDefinition, ExecutionEvent } from '@shared/workflow'
 import type { LlmModelInfo } from '@shared/node'
 import type { CreateProjectInput } from '@shared/project'
@@ -21,6 +21,9 @@ import type { AppSettingsInput } from '@shared/settings'
 
 let mainWindow: BrowserWindow | null = null
 const engine = new WorkflowEngine()
+
+/** app.getPath 允许的路径类型 */
+const ALLOWED_APP_PATHS = ['userData', 'documents', 'desktop', 'downloads', 'temp', 'home'] as const
 
 /** 明文密钥的统一定位文案，供各写入口复用 */
 function plaintextSecretError(
@@ -323,9 +326,13 @@ function setupIPC() {
     }
   })
 
-  // 获取用户数据目录
+  // 获取用户数据目录：仅开放确有用途的几种，避免渲染进程借任意 name 探测系统路径
   ipcMain.handle('app:getPath', (_event, name: string) => {
-    return app.getPath(name as any)
+    const allowed: readonly string[] = ALLOWED_APP_PATHS
+    if (!allowed.includes(name)) {
+      throw new Error(`不支持的路径类型: ${name}`)
+    }
+    return app.getPath(name as typeof ALLOWED_APP_PATHS[number])
   })
 
   // 执行历史查询

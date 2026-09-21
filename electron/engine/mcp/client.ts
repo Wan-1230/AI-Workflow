@@ -1,4 +1,42 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
+import { existsSync } from 'fs'
+import { join } from 'path'
+
+/**
+ * 解析待执行的命令与参数。
+ *
+ * Windows 上 npx / npm 之类是 .cmd 批处理壳，CreateProcess 不会补扩展名，
+ * 旧实现因此直接 shell:true —— 代价是 args 只做字符串拼接、不做转义：
+ * 导入一个工作流 JSON，把 mcpArgs 写成 `-y foo & calc` 便能在用户机器上执行任意命令。
+ * 现改为在 PATH 上定位 .cmd/.bat 壳并显式经 cmd.exe /c 承载，命令与参数始终以数组传入。
+ */
+export function resolveSpawn(command: string, args: string[]): { file: string; args: string[] } {
+  if (process.platform !== 'win32' || /\.(exe|com)$/i.test(command)) {
+    return { file: command, args }
+  }
+
+  const shim = findWindowsShim(command)
+  if (!shim) return { file: command, args }
+
+  return {
+    file: process.env.ComSpec || 'cmd.exe',
+    args: ['/d', '/s', '/c', shim, ...args]
+  }
+}
+
+function findWindowsShim(command: string): string | null {
+  // 已给出路径的不再猜测，避免把用户写的绝对路径当命令名去搜
+  if (/[/\\]/.test(command)) return null
+
+  const dirs = (process.env.PATH || '').split(';').filter(Boolean)
+  for (const dir of dirs) {
+    for (const ext of ['.cmd', '.bat']) {
+      const candidate = join(dir, `${command}${ext}`)
+      if (existsSync(candidate)) return candidate
+    }
+  }
+  return null
+}
 
 /* =====================================================================
    轻量 MCP (Model Context Protocol) 客户端
@@ -82,8 +120,9 @@ export class McpClient {
     const command = this.config.command
     if (!command) throw new McpError('MCP 服务器未配置 command 或 serverUrl')
 
-    this.proc = spawn(command, this.config.args || [], {
-      shell: process.platform === 'win32',
+    const spawned = resolveSpawn(command, this.config.args || [])
+    this.proc = spawn(spawned.file, spawned.args, {
+      shell: false,
       stdio: ['pipe', 'pipe', 'pipe']
     })
 

@@ -1,5 +1,6 @@
 import { Worker } from 'worker_threads'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import type { NodeContext, NodeExecuteFn } from '@shared/node'
 
 const CODE_TIMEOUT = 10000 // 10秒代码执行超时
@@ -13,6 +14,16 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   return new Promise((resolve, reject) => {
     const workerPath = join(__dirname, 'sandbox-worker.js')
 
+    // Worker 只能加载真实文件；打包后引擎被内联进 bundle，该路径必然不存在。
+    // 而 new Worker() 对缺失文件不会同步抛错（只在异步 error 事件里暴露），
+    // 因此必须显式探测 —— 否则下面的 try/catch 回退分支永远走不到，节点必然失败。
+    if (!existsSync(workerPath)) {
+      ctx.logger('独立沙箱不可用，回退到 vm 白名单执行')
+      executeFallback(code, input, ctx).then(resolve, reject)
+      return
+    }
+
+    let settled = false
     let worker: Worker
     try {
       worker = new Worker(workerPath, {
@@ -34,7 +45,7 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
     }, CODE_TIMEOUT)
 
     // 监听取消信号
-    const signal = (ctx as any).signal as AbortSignal | undefined
+    const signal = ctx.signal
     if (signal) {
       const onAbort = () => {
         worker.terminate()
@@ -45,6 +56,7 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
     }
 
     worker.on('message', (msg: { success: boolean; result?: unknown; error?: string; logs: string[] }) => {
+      settled = true
       clearTimeout(timeout)
 
       if (msg.logs.length > 0) {
@@ -64,7 +76,11 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
 
     worker.on('error', (err) => {
       clearTimeout(timeout)
-      reject(new Error(`沙箱 Worker 错误: ${err.message}`))
+      if (settled) return
+      settled = true
+      // Worker 尚未产出任何消息即故障：回退执行不会造成重复副作用
+      ctx.logger(`沙箱 Worker 故障（${err.message}），回退到 vm 执行`)
+      executeFallback(code, input, ctx).then(resolve, reject)
     })
 
     worker.on('exit', (exitCode) => {

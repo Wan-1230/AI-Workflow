@@ -16,6 +16,36 @@ export interface ExecutionRecord {
 }
 
 /**
+ * executions 表的行形状（列名即 SQL 中的名字）。
+ * 读取处曾三处重复 `as any` + 手工映射，统一由此派生。
+ */
+interface ExecutionRow {
+  id: string
+  workflow_id: string
+  workflow_name: string
+  status: 'completed' | 'error' | 'cancelled'
+  started_at: string
+  finished_at: string
+  duration_ms: number
+  node_count: number
+  results_json: string
+  error_message: string | null
+}
+
+function rowToRecord(row: ExecutionRow): ExecutionRecord {
+  return {
+    id: row.id,
+    workflowId: row.workflow_id,
+    workflowName: row.workflow_name,
+    status: row.status,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    duration: row.duration_ms,
+    nodeCount: row.node_count,
+    resultsJson: row.results_json
+  }
+}
+/**
  * 执行历史存储
  * 使用 SQLite 持久化工作流执行记录
  */
@@ -117,39 +147,19 @@ export class ExecutionStorage {
     sql += ' ORDER BY started_at DESC LIMIT ? OFFSET ?'
     params.push(limit, offset)
 
-    const rows = this.db.prepare(sql).all(...params) as any[]
+    const rows = this.db.prepare(sql).all(...params) as unknown as ExecutionRow[]
 
-    return rows.map(row => ({
-      id: row.id,
-      workflowId: row.workflow_id,
-      workflowName: row.workflow_name,
-      status: row.status,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at,
-      duration: row.duration_ms,
-      nodeCount: row.node_count,
-      resultsJson: row.results_json
-    }))
+    return rows.map(rowToRecord)
   }
 
   /**
    * 获取单次执行详情
    */
   getExecution(id: string): ExecutionRecord | null {
-    const row = this.db.prepare('SELECT * FROM executions WHERE id = ?').get(id) as any
+    const row = this.db.prepare('SELECT * FROM executions WHERE id = ?').get(id) as unknown as ExecutionRow | undefined
     if (!row) return null
 
-    return {
-      id: row.id,
-      workflowId: row.workflow_id,
-      workflowName: row.workflow_name,
-      status: row.status,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at,
-      duration: row.duration_ms,
-      nodeCount: row.node_count,
-      resultsJson: row.results_json
-    }
+    return rowToRecord(row)
   }
 
   /**
@@ -176,7 +186,7 @@ export class ExecutionStorage {
         SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error,
         AVG(duration_ms) as avg_duration
       FROM executions
-    `).get() as any
+    `).get() as unknown as { total: number | null; completed: number | null; error: number | null; avg_duration: number | null }
 
     return {
       total: row.total || 0,

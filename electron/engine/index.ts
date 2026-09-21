@@ -1,4 +1,4 @@
-import type { WorkflowDefinition, WorkflowEdge, ExecutionEvent, NodeResult, StreamChunk } from '@shared/workflow'
+import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, ExecutionEvent, NodeResult, StreamChunk } from '@shared/workflow'
 import type { LlmModelInfo } from '@shared/node'
 import { parseWorkflow } from './parser'
 import { Scheduler } from './scheduler'
@@ -146,7 +146,7 @@ export class WorkflowEngine {
    */
   private async executeSingleNode(
     nodeId: string,
-    nodes: { id: string; type: string; config: Record<string, unknown> }[],
+    nodes: WorkflowNode[],
     wf: WorkflowDefinition,
     nodeResults: Map<string, NodeResult>,
     activeNodes: Set<string>,
@@ -185,7 +185,7 @@ export class WorkflowEngine {
         output = await this.executeSubWorkflow(node, inputs, onEvent, abortController, secrets, models, variables, stream)
       } else {
         // 执行节点（带超时和重试）
-        output = await this.executor.executeNode(node as any, {
+        output = await this.executor.executeNode(node, {
           workflow: wf,
           nodeResults,
           secrets,

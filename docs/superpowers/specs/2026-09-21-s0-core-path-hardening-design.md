@@ -312,3 +312,24 @@ export interface Migration {
 8. §6 验收逐条核对
 
 其中 2 与 3 完成后即可解锁「节点能跑」的验证，可提前人工试用一次再进入 5/6。
+
+## 9. 实现期新增发现（已在本 spec 范围内修复）
+
+按 §8 顺序实施时，另发现五类计划外问题，均已修复：
+
+| 发现 | 证据 | 处置 |
+| --- | --- | --- |
+| **内置模板从构造上就不成立**：`nid()` 生成带随机后缀的节点 id，但模板内的插值写的是裸前缀（`{{retrieve.combined}}`、`{{process.text}}`）；`manual-trigger` 并无 `text` 输出；file-io 用了未在目录中声明的 `filePath` 键 | 新校验器直接拒绝 `example-rag-qa` 与 `example-text-pipeline` | 改写两个模板：引用改用生成的真实 id、补 `variable-set` 作为文本与问题的来源、`filePath` → `path` |
+| **文本处理节点的 `operation: 'trim'` 完全不起作用**：真正生效的是未在 UI 暴露的布尔项 `config.trim`；regex 所需的 `pattern`/`flags` 也未暴露为字段 | 端到端测试断言 trim 后文本，实际返回原串 | 下拉值与布尔项同义；目录补 `pattern`/`flags`/`lowercase` 字段 |
+| **代码执行节点在打包产物中必然失败**：`new Worker(缺失路径)` 不同步抛错，只发异步 `error` 事件，故 `catch` 回退分支永远走不到 | 测试报 `Cannot find module .../sandbox-worker.js` | 先 `existsSync` 探测再决定是否用 Worker；异步 `error` 也回退到 vm 执行 |
+| **MCP 命令拼接存在任意命令执行**：为让 Windows 的 `npx`（实为 `npx.cmd`）可执行而使用 `shell: true`，导致 args 只拼接不转义 | Node 自身告警 `DEP0190`；含空格路径亦被拼错（`'C:\Program'`） | 改为 PATH 探测 `.cmd`/`.bat` 后经 `cmd.exe /d /s /c` 承载，命令与参数始终以数组传入；补 `resolveSpawn` 注入回归测试 |
+| **`src/lib/yaml-converter.ts`（193 行）与其唯一依赖 `yaml` 完全无引用者** | 全仓 grep 无任何 import；UI 与文档亦未提及 YAML | 删除模块并移除依赖 |
+
+另需记录：`defaultTimeout` 设置项曾长期只写库不被读取（设置页可改但无效果），现已接线，并以迁移 #2 抬升遗留的 30s 值。
+
+### 尚未覆盖的验收项
+
+§6 中两条无法由自动化或本环境证明，需使用者确认：
+
+- **#2**：在应用内以真实 API Key 运行含 `llm-call` 的工作流并收到模型回复。测试以 mock 覆盖了请求构造与响应解析，但真实服务商兼容性（尤其各家流式格式差异）未经实盘验证。
+- **#6 的失败分支**：迁移抛错时中止启动并给出备份路径。降级保护（`user_version` 高于程序版本即拒绝启动）有代码路径但未被实际触发验证。

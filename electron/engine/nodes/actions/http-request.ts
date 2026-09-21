@@ -56,7 +56,7 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
   // 如果外部有取消信号，联动取消
-  const externalSignal = (ctx as any).signal as AbortSignal | undefined
+  const externalSignal = ctx.signal
   if (externalSignal) {
     if (externalSignal.aborted) {
       clearTimeout(timeoutId)

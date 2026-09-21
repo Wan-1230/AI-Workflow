@@ -58,7 +58,7 @@ pnpm package
 | --- | --- | --- |
 | 触发器 | ⚡ 手动触发 | 点击运行启动工作流 |
 | 动作 | 🌐 HTTP 请求 | GET/POST/PUT/DELETE，支持请求头与请求体 |
-| 动作 | 💻 代码执行 | 沙箱内运行 JavaScript，`input` 为上游数据 |
+| 动作 | 💻 代码执行 | 运行 JavaScript，`input` 为上游数据；打包环境无独立 worker 文件时回退到 vm 白名单沙箱 |
 | 动作 | 🔔 通知输出 | 向运行日志输出消息（info/warning/error） |
 | 动作 | ✂️ 文本处理 | trim/replace/split/slice/join/正则 六种操作 |
 | 动作 | 📄 文件读写 | 读取或写入本地文件（UTF-8/Base64） |
@@ -70,8 +70,8 @@ pnpm package
 | AI | 📝 提示词模板 | `{{varName}}` 占位符渲染，缺失变量提示 |
 | Agent | 🛠️ 工具调用 | 内置工具（HTTP/时间/数学/UUID）或 MCP 服务器工具 |
 | Agent | 🧠 子 Agent 委派 | 以角色提示词委派 LLM 完成子任务 |
-| RAG | 📚 文档入库 | 文本/文件切分（可配重叠）向量化，写入本地向量库 |
-| RAG | 🎯 向量检索 | 语义相似度检索，输出合并上下文供 LLM 引用 |
+| RAG | 📚 文档入库 | 文本/文件切分（可配重叠）后建索引；当前为进程内词频向量，重启即失效 |
+| RAG | 🎯 向量检索 | 词频余弦相似度检索，输出合并上下文供 LLM 引用（非语义 embedding） |
 
 ## 🔧 变量与插值语法
 
@@ -100,7 +100,7 @@ pnpm package
 │       ├── executor/         # 执行器：变量解析 / 插值 / 超时 / 重试
 │       ├── nodes/            # 节点注册表 + 16 个节点实现
 │       ├── mcp/              # MCP 客户端（stdio / SSE）
-│       ├── scheduler/        # 定时调度
+│       ├── scheduler/        # 拓扑排序（Kahn）与并行分组
 │       └── templates.ts      # 4 个工作流模板构建器
 ├── packages/shared/          # 前后端共享类型（workflow/project/model/prompt/settings）
 └── src/                      # 渲染进程（React 19 + Zustand + ReactFlow）
@@ -123,9 +123,11 @@ pnpm package
 | `projects.db` | 项目库（工作流 JSON） |
 | `models.db` | 模型配置（API Key 经 safeStorage 加密） |
 | `prompts.db` | 提示词模板库 |
-| `history.db` | 执行历史 |
+| `executions.db` | 执行历史 |
 | `settings.db` | 应用设置 |
-| `vector-store/` | RAG 本地向量库（余弦相似度检索） |
+| `app.db` | 数据库迁移版本与迁移记录（含每次破坏性迁移的备份路径） |
+| `vector-store/` | RAG 索引目录（当前仅缓存分块文本，向量本体在内存，重启失效） |
+| `backups/` | 破坏性迁移前的 `VACUUM INTO` 全量备份 |
 
 ## 📦 常用命令
 
@@ -137,5 +139,22 @@ pnpm package
 | `pnpm preview` | 以构建产物运行 |
 | `pnpm package` | 构建 + electron-builder 打包安装程序 |
 | `pnpm lint` / `pnpm format` | ESLint 修复 / Prettier 格式化 |
+| `pnpm lint:check` | ESLint 校验（不改文件，CI 用） |
+| `pnpm test` / `pnpm test:watch` | Vitest 单测与集成测试 / 监听模式 |
+| `pnpm test:coverage` | 测试覆盖率 |
+
+## ⚠️ 当前状态与已知限制
+
+诚实清单，避免文档跑在实现前面：
+
+- **仅 Windows 验证**：原生模块与打包链路都在 Windows 上跑通；Linux/macOS 未验证，CI 亦只跑 `windows-latest`。
+- **RAG 是词频检索，不是语义检索**：索引为 TF 词频向量且只存内存，重启即失效。真正的 embedding 与向量持久化在计划中。
+- **节点超时后不会中止底层任务**：LLM/HTTP 请求超时后当前只放弃等待，正在飞的网络请求与子进程不会立即被取消。
+- **循环节点只渲染模板**：不会让下游节点逐项执行，`iterations` 也未落库。
+- **单条节点失败即中断整个工作流**：没有 per-node 的重试、跳过或错误分支。
+- **无崩溃上报与匿名统计**：本地优先，因此出问题只能靠 `%APPDATA%/ai-workflow` 下的日志与 `backups/` 排查。
+- **UI 层无自动化测试**：测试止于引擎与数据契约；界面正确性仍靠人工验证。
+
+完整设计与阶段性规划见 `docs/superpowers/specs/`。
 
 详细操作手册见 [docs/使用说明.md](docs/使用说明.md)。

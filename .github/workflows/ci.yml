@@ -29,9 +29,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Lint（禁止 --fix，仅校验）
-        # 暂不设 --max-warnings=0：剩余告警集中在存储层 `as any` 行转换，
-        # 该批文件在 S0 的密钥改造步骤会被重写，届时于验收阶段收紧为 0。
-        run: pnpm lint:check
+        run: pnpm lint:check --max-warnings=0
 
       - name: 测试
         run: pnpm test

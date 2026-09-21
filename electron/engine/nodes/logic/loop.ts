@@ -10,30 +10,41 @@ import type { NodeContext, NodeExecuteFn } from '@shared/node'
 export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const config = ctx.config
 
-  // 解析数组来源：优先 config.items（executor 已完成模板插值）
+  // 解析数组来源。两条入口此前被写成互斥分支：只填 config.items（目录里明写的
+  // 「或直接填数组 (JSON)」）时 itemsSource 为空，整段解析被跳过，
+  // 于是循环静默产出 0 项且状态为 success。现改为按优先级依次尝试。
   let items: unknown[] = []
   const raw = config.items
 
   if (Array.isArray(raw)) {
     items = raw
-  } else if (config.itemsSource) {
-    // itemsSource 形如 {{nodeId.data}}，executor 已将其解析为字符串；
-    // 尝试从 inputs 或直接解析 JSON
+  } else if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (Array.isArray(parsed)) items = parsed
+      else ctx.logger('config.items 不是 JSON 数组，已忽略')
+    } catch {
+      ctx.logger('config.items 不是合法 JSON，已忽略')
+    }
+  }
+
+  if (items.length === 0 && config.itemsSource) {
+    // itemsSource 形如 {{nodeId.data}}，executor 已完成插值
     const source = String(config.itemsSource)
     const key = source.replace(/^\{\{|\}\}$/g, '')
     const fromInputs = ctx.inputs[key] ?? ctx.inputs[Object.keys(ctx.inputs)[0]]
+
     if (Array.isArray(fromInputs)) {
       items = fromInputs
     } else if (typeof fromInputs === 'string') {
       try {
-        const parsed = JSON.parse(fromInputs)
+        const parsed: unknown = JSON.parse(fromInputs)
         if (Array.isArray(parsed)) items = parsed
-      } catch { /* 非 JSON，按单元素处理 */ }
-    } else if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) items = parsed
-      } catch { /* 保持原样 */ }
+      } catch { /* 非 JSON，交由下方空结果分支处理 */ }
+    }
+
+    if (items.length === 0 && fromInputs !== undefined && source !== '{{input}}') {
+      ctx.logger(`itemsSource "${source}" 未解析出数组，循环将不执行任何迭代`)
     }
   }
 

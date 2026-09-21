@@ -68,6 +68,7 @@ function buildLlmChat(): WorkflowDefinition {
 /** 示例：RAG 知识问答（文档入库 → 向量检索 → LLM 生成） */
 function buildRagQA(): WorkflowDefinition {
   const trigger = nid('trigger')
+  const ask = nid('ask')
   const upload = nid('upload')
   const retrieve = nid('retrieve')
   const llm = nid('llm')
@@ -78,6 +79,13 @@ function buildRagQA(): WorkflowDefinition {
       label: '手动触发',
       position: { x: 80, y: 240 },
       config: {}
+    },
+    {
+      id: ask,
+      type: 'variable-set',
+      label: '待答问题',
+      position: { x: 80, y: 80 },
+      config: { key: 'rag_question', value: '什么是 AI Agent？' }
     },
     {
       id: upload,
@@ -99,7 +107,7 @@ function buildRagQA(): WorkflowDefinition {
       label: '向量检索',
       position: { x: 640, y: 120 },
       config: {
-        query: '什么是 AI Agent？',
+        query: '{{global.rag_question}}',
         topK: 3,
         minScore: 0.05
       }
@@ -112,23 +120,26 @@ function buildRagQA(): WorkflowDefinition {
       config: {
         modelId: '',
         systemPrompt: '你是知识库问答助手。请严格依据提供的上下文回答，上下文不足时如实说明。',
-        userPrompt: '根据以下检索到的知识片段回答问题：\n\n【知识片段】\n{{retrieve.combined}}\n\n问题：{{retrieve.query}}',
+        // 引用必须使用节点的真实 id：曾写作 {{retrieve.combined}}，
+        // 而 id 带随机后缀，插值解析不到便原样送入提示词
+        userPrompt: `根据以下检索到的知识片段回答问题：\n\n【知识片段】\n{{${retrieve}.combined}}\n\n问题：{{global.rag_question}}`,
         temperature: 0.3,
         maxTokens: 1024,
         stream: true
       }
     }
   ], [
-    { id: `${trigger}_e_${upload}`, source: trigger, target: upload },
-    { id: `${trigger}_e_${llm}`, source: trigger, target: llm },
+    { id: `${trigger}_e_${ask}`, source: trigger, target: ask },
+    { id: `${ask}_e_${upload}`, source: ask, target: upload },
     { id: `${upload}_e_${retrieve}`, source: upload, target: retrieve },
     { id: `${retrieve}_e_${llm}`, source: retrieve, target: llm }
   ])
 }
 
-/** 示例：文本处理流水线（LLM 摘要 → 文本处理 → 文件保存） */
+/** 示例：文本处理流水线（取样例文本 → LLM 摘要 → 文本处理 → 文件保存） */
 function buildTextPipeline(): WorkflowDefinition {
   const trigger = nid('trigger')
+  const sample = nid('sample')
   const llm = nid('llm')
   const process = nid('process')
   const save = nid('save')
@@ -137,18 +148,32 @@ function buildTextPipeline(): WorkflowDefinition {
       id: trigger,
       type: 'manual-trigger',
       label: '手动触发',
-      position: { x: 80, y: 240 },
+      position: { x: 60, y: 240 },
       config: {}
+    },
+    {
+      id: sample,
+      type: 'variable-set',
+      label: '样例文本',
+      position: { x: 60, y: 80 },
+      config: {
+        key: 'article',
+        value: 'Qoder 是一款面向开发者的智能编程助手。它把需求拆解、代码生成、终端执行与结果验证'
+          + '串成一条可追溯的工作流。相比补全式的交互，它会更早地暴露假设与权衡，'
+          + '因此在改动面较大的任务上更容易被审阅与纠正。'
+      }
     },
     {
       id: llm,
       type: 'llm-call',
       label: 'LLM 摘要',
-      position: { x: 360, y: 240 },
+      position: { x: 340, y: 240 },
       config: {
         modelId: '',
         systemPrompt: '你是文本摘要专家。',
-        userPrompt: '请将以下文本压缩为 3 句话以内的摘要：\n\n{{trigger.text}}',
+        // 曾引用 {{trigger.text}}：manual-trigger 并没有 text 输出，且 id 带随机后缀，
+        // 该模板因此从未真正拿到待摘要文本
+        userPrompt: '请将以下文本压缩为 3 句话以内的摘要：\n\n{{global.article}}',
         temperature: 0.4,
         maxTokens: 512,
         stream: false
@@ -158,8 +183,9 @@ function buildTextPipeline(): WorkflowDefinition {
       id: process,
       type: 'text-process',
       label: '清理格式',
-      position: { x: 640, y: 240 },
+      position: { x: 620, y: 240 },
       config: {
+        text: `{{${llm}.text}}`,
         operation: 'trim',
         uppercase: false,
         lowercase: false
@@ -169,15 +195,18 @@ function buildTextPipeline(): WorkflowDefinition {
       id: save,
       type: 'file-io',
       label: '保存文件',
-      position: { x: 920, y: 240 },
+      position: { x: 900, y: 240 },
       config: {
         mode: 'write',
-        filePath: '{{env.USERPROFILE}}/Desktop/summary.txt',
-        content: '摘要结果：\n{{process.text}}'
+        // 目录声明的字段名是 path，曾误写成 filePath 导致路径配置不生效
+        path: '{{env.USERPROFILE}}/Desktop/summary.txt',
+        content: `摘要结果：\n{{${process}.text}}`,
+        encoding: 'utf-8'
       }
     }
   ], [
-    { id: `${trigger}_e_${llm}`, source: trigger, target: llm },
+    { id: `${trigger}_e_${sample}`, source: trigger, target: sample },
+    { id: `${sample}_e_${llm}`, source: sample, target: llm },
     { id: `${llm}_e_${process}`, source: llm, target: process },
     { id: `${process}_e_${save}`, source: process, target: save }
   ])
