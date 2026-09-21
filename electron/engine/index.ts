@@ -101,6 +101,8 @@ export class WorkflowEngine {
     }
 
     // 5. 按组执行（组内并行，组间串行）
+    let haltedByError = false
+
     for (const group of parallelGroups) {
       // 检查取消信号
       if (signal.aborted) break
@@ -116,23 +118,28 @@ export class WorkflowEngine {
 
       await Promise.allSettled(promises)
 
-      // 如果有任何节点失败且非条件节点，终止工作流
-      const hasFatalError = activeInGroup.some(nodeId => {
-        const result = nodeResults.get(nodeId)
-        const node = parsed.nodes.find(n => n.id === nodeId)
-        return result?.status === 'error' && node?.type !== 'condition'
-      })
-
-      if (hasFatalError) break
+      // 失败处置：按各节点声明的 onError 策略分流，而非一律中断
+      if (this.applyErrorStrategies(activeInGroup, parsed.nodes, wf.edges, nodeResults, activeNodes, onEvent)) {
+        haltedByError = true
+        break
+      }
     }
 
     // 6. 取消收尾：无条件回写，避免最后一组并行节点既不产出结果也扫不到
     if (signal.aborted) {
       this.emitCancelled(onEvent, activeNodes, nodeResults)
+    } else {
+      // 未被激活的节点（分支未命中、或上游按 skip 跳过）补为 skipped，
+      // 否则它们既不报错也不产出结果，界面与历史里都是悬空状态
+      this.materializeSkipped(parsed.nodes, nodeResults, onEvent)
     }
 
-    // 7. 工作流完成/取消
-    const finalStatus = signal.aborted ? 'workflow:cancelled' : 'workflow:complete'
+    // 7. 工作流终态
+    const finalStatus = signal.aborted
+      ? 'workflow:cancelled'
+      : haltedByError
+        ? 'workflow:error'
+        : 'workflow:complete'
     onEvent({
       type: finalStatus as ExecutionEvent['type'],
       timestamp: Date.now()
@@ -310,6 +317,85 @@ export class WorkflowEngine {
       results: subResultObj,
       summary,
       status: 'success'
+    }
+  }
+
+  /**
+   * 按节点声明的 onError 策略处置失败。
+   *
+   * 此前任何节点报错都会立刻中断整条工作流，一个可选步骤失败会带走后续所有可用步骤。
+   * 返回 true 表示存在需要中止整条流的失败。
+   */
+  private applyErrorStrategies(
+    executed: string[],
+    nodes: WorkflowNode[],
+    edges: WorkflowEdge[],
+    nodeResults: Map<string, NodeResult>,
+    activeNodes: Set<string>,
+    onEvent: (event: ExecutionEvent) => void
+  ): boolean {
+    let fatal = false
+
+    for (const nodeId of executed) {
+      const result = nodeResults.get(nodeId)
+      if (!result || result.status !== 'error') continue
+
+      const node = nodes.find(n => n.id === nodeId)
+      const strategy = node?.executionConfig?.onError ?? 'stop'
+
+      if (strategy === 'stop') {
+        fatal = true
+        continue
+      }
+
+      // skip / retry-then-skip（重试已由执行器耗尽）：本节点降级为 skipped，其余分支继续
+      if (strategy === 'skip' || strategy === 'retry-then-skip') {
+        nodeResults.set(nodeId, {
+          nodeId,
+          status: 'skipped',
+          output: {},
+          error: result.error,
+          duration: result.duration
+        })
+        onEvent({
+          type: 'node:skipped',
+          nodeId,
+          data: { reason: 'error-skip', error: result.error },
+          timestamp: Date.now()
+        })
+        continue
+      }
+
+      // error-branch：保留 error，只让错误出口上的下游继续
+      const keepHandle = node?.executionConfig?.errorHandle ?? 'error'
+      for (const edge of edges.filter(e => e.source === nodeId)) {
+        if ((edge.sourceHandle ?? 'true') !== keepHandle) {
+          this.deactivateBranch(edge.target, edges, activeNodes, new Set())
+        }
+      }
+    }
+
+    return fatal
+  }
+
+  /**
+   * 把未被执行的节点补成 skipped 终态。
+   * 未补的话它们既不报错也无结果，在界面上是悬空、在历史里是缺失。
+   */
+  private materializeSkipped(
+    nodes: WorkflowNode[],
+    nodeResults: Map<string, NodeResult>,
+    onEvent: (event: ExecutionEvent) => void
+  ): void {
+    for (const node of nodes) {
+      if (nodeResults.has(node.id)) continue
+      nodeResults.set(node.id, {
+        nodeId: node.id,
+        status: 'skipped',
+        output: {},
+        duration: 0
+      })
+      onEvent({ type: 'node:skipped', nodeId: node.id, timestamp: Date.now() })
     }
   }
 

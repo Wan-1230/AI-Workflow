@@ -89,8 +89,11 @@ export type ExecutionEventType =
   | 'node:log'
   | 'node:stream'
   | 'node:cancelled'
+  | 'node:skipped'
   | 'workflow:complete'
   | 'workflow:cancelled'
+  /** 因节点失败而终止（区别于用户主动取消的 workflow:cancelled） */
+  | 'workflow:error'
 
 export interface ExecutionEvent {
   type: ExecutionEventType
@@ -115,7 +118,22 @@ export interface RetryConfig {
   interval: number  // ms
 }
 
+export type NodeErrorStrategy =
+  /** 失败即中断整个工作流（默认，与历史行为一致） */
+  | 'stop'
+  /** 记为 skipped 并继续其余分支 */
+  | 'skip'
+  /** 先按 retry 配置重试，耗尽后按 skip 处理 */
+  | 'retry-then-skip'
+  /** 不中断，仅激活 errorHandle 出口上的下游（正常出口下游记 skipped） */
+  | 'error-branch'
+
 export interface NodeExecutionConfig {
-  timeout?: number      // 单节点超时 ms，默认 30000
-  retry?: RetryConfig   // 重试配置
+  /** 单节点超时（ms）。缺省取 max(全局设置, 节点目录声明的上限) */
+  timeout?: number
+  retry?: RetryConfig
+  /** 失败处置策略，缺省 'stop' */
+  onError?: NodeErrorStrategy
+  /** onError='error-branch' 时使用的出口句柄 id，缺省 'error' */
+  errorHandle?: string
 }

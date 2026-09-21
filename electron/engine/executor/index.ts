@@ -37,6 +37,7 @@ export class Executor {
     const declaredLimit = registered.definition.executionLimits?.timeoutMs ?? 0
     const timeout = execConfig.timeout ?? Math.max(this.defaultTimeout, declaredLimit)
     const retryConfig = execConfig.retry
+      ?? (execConfig.onError === 'retry-then-skip' ? { maxRetries: 2, interval: 1000 } : undefined)
 
     // 带重试的执行
     return this.executeWithRetry(node, registered.execute, context, inputs, timeout, retryConfig)
@@ -78,6 +79,9 @@ export class Executor {
           throw lastError
         }
 
+        // 超时不重试：底层已被中止，重试只会把等待时间翻倍
+        if (lastError.name === 'TimeoutError') break
+
         // 如果还有重试机会
         if (attempt < maxRetries) {
           context.logger(node.id, `执行失败，${retryInterval}ms 后重试 (${attempt + 1}/${maxRetries})...`)
@@ -102,6 +106,14 @@ export class Executor {
     // 解析配置中的模板变量 {{nodeId.field}} / {{global.KEY}} 等
     const resolvedConfig = this.resolveTemplates(node.config, context)
 
+    // 每次尝试持有独立控制器：超时或被取消时真正 abort，使节点内部的
+    // fetch / Worker / 子进程随之终止。此前用 Promise.race 放弃等待，
+    // 底层任务仍在后台跑成孤儿。
+    const attempt = new AbortController()
+    const onParentAbort = () => attempt.abort(new Error('执行已取消'))
+    if (context.signal.aborted) attempt.abort(new Error('执行已取消'))
+    else context.signal.addEventListener('abort', onParentAbort, { once: true })
+
     // 构建节点执行上下文：注入变量 / 模型 / 流式回调
     const nodeContext = {
       config: resolvedConfig,
@@ -109,7 +121,7 @@ export class Executor {
       secrets: context.secrets,
       variables: context.variables,
       models: context.models,
-      signal: context.signal,
+      signal: attempt.signal as AbortSignal,
       logger: (msg: string) => context.logger(node.id, msg),
       stream: context.stream
         ? (chunk: Parameters<NonNullable<typeof context.stream>>[0]) => {
@@ -118,24 +130,23 @@ export class Executor {
         : undefined
     }
 
-    // 创建超时 Promise
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`节点执行超时 (${timeout}ms)`))
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const guard = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const err = new Error(`节点执行超时 (${timeout}ms)`)
+        err.name = 'TimeoutError'
+        attempt.abort(err)
+        reject(err)
       }, timeout)
-
-      // 如果取消信号触发，清除定时器
-      context.signal.addEventListener('abort', () => {
-        clearTimeout(timer)
-        reject(new Error('执行已取消'))
-      }, { once: true })
     })
 
-    // 竞争：执行 vs 超时
-    return await Promise.race([
-      executeFn(nodeContext),
-      timeoutPromise
-    ])
+    try {
+      return await Promise.race([executeFn(nodeContext), guard])
+    } finally {
+      if (timer) clearTimeout(timer)
+      // 关键：不摘除则每次 attempt 都会在长生命周期的运行信号上留下一个监听器
+      context.signal.removeEventListener('abort', onParentAbort)
+    }
   }
 
   /**
@@ -148,11 +159,15 @@ export class Executor {
         return
       }
 
-      const timer = setTimeout(resolve, ms)
-      signal.addEventListener('abort', () => {
+      const onAbort = () => {
         clearTimeout(timer)
         reject(new Error('执行已取消'))
-      }, { once: true })
+      }
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort)
+        resolve()
+      }, ms)
+      signal.addEventListener('abort', onAbort, { once: true })
     })
   }
 
