@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import { join } from 'path'
 import { WorkflowEngine } from '../../electron/engine'
-import { validateWorkflow } from '../../electron/engine/validator'
+import { validateWorkflow, formatValidationIssues } from '@shared/validator'
 import { ExecutionStorage } from '../../electron/engine/storage'
 import { CredentialManager } from '../../electron/engine/storage/credentials'
 import { ProjectStore } from '../../electron/engine/storage/projects'
@@ -131,7 +131,10 @@ function setupIPC() {
       // 输入校验
       const validation = validateWorkflow(wf)
       if (!validation.valid) {
-        return { success: false, error: `工作流校验失败: ${validation.errors.join('; ')}` }
+        return { success: false, error: `工作流校验失败: ${formatValidationIssues(validation.errors)}` }
+      }
+      if (validation.warnings.length) {
+        console.warn(`工作流校验告警: ${formatValidationIssues(validation.warnings)}`)
       }
 
       currentExecutionId = `exec_${Date.now()}`

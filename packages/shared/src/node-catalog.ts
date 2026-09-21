@@ -79,7 +79,7 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       code: '// 输入数据在 input 变量中\n// 用 return 返回结果\nconst result = input;\nreturn { result };'
     },
     fields: [
-      { key: 'code', label: '执行代码', type: 'textarea', rows: 12, help: 'input 为上游数据，return 对象作为输出' }
+      { key: 'code', nodeRefInterpolation: false, label: '执行代码', type: 'textarea', rows: 12, help: 'input 为上游数据，return 对象作为输出' }
     ],
     outputs: [
       { name: 'result', label: 'return 结果', type: 'any' },
@@ -216,7 +216,7 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
     fields: [
       { key: 'itemsSource', label: '数组来源', type: 'text', help: '上游节点输出引用，解析后须为数组，如 {{http.data.items}}' },
       { key: 'items', label: '或直接填数组 (JSON)', type: 'json' },
-      { key: 'template', label: '每项模板', type: 'textarea', rows: 4, help: '支持 {{item}} / {{item.field}} / {{index}} / {{count}}' },
+      { key: 'template', nodeRefInterpolation: false, label: '每项模板', type: 'textarea', rows: 4, help: '支持 {{item}} / {{item.field}} / {{index}} / {{count}}' },
       { key: 'mode', label: '处理方式', type: 'select', options: [{ value: 'template', label: '模板渲染' }] }
     ],
     outputs: [
@@ -310,7 +310,7 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       variables: '{}'
     },
     fields: [
-      { key: 'template', label: '模板内容', type: 'textarea', rows: 8, help: '{{varName}} 占位符；配置 variables 或上游输出可自动填充' },
+      { key: 'template', nodeRefInterpolation: false, label: '模板内容', type: 'textarea', rows: 8, help: '{{varName}} 占位符；配置 variables 或上游输出可自动填充' },
       { key: 'variables', label: '变量映射 (JSON)', type: 'json', help: '如 {"varName": "{{nodeId.field}}"}' }
     ],
     outputs: [

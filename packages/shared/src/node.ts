@@ -31,6 +31,12 @@ export interface NodeFieldSchema {
   options?: { value: string; label: string }[]
   /** 动态选项来源；取代此前 NodeConfig 内对 modelId 键名的隐式约定 */
   dataSource?: 'models' | 'credentials'
+  /**
+   * 该字段内的 {{...}} 是否按「上游节点输出引用」解析（默认 true）。
+   * 置 false 用于模板正文类字段：其占位符由节点自身语义定义
+   * （如提示词模板的用户变量名、循环的 {{item}}/{{index}}），不应被当作节点引用校验。
+   */
+  nodeRefInterpolation?: boolean
 }
 
 export interface NodeDefinition {
