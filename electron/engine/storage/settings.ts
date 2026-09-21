@@ -8,7 +8,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   language: 'zh-CN',
   storagePath: '',
   debugMode: false,
-  defaultTimeout: 30000,
+  defaultTimeout: 120000,
   saveHistory: true,
 }
 

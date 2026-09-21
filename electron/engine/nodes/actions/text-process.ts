@@ -5,6 +5,8 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const config = ctx.config
   const text = String(config.text || '')
 
+  const operation = String(config.operation || '')
+
   // 操作集合（互斥组合，按优先级执行）
   const ops: string[] = []
   const addOp = (name: string, condition: boolean) => {
@@ -13,12 +15,12 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
 
   addOp('upper', config.uppercase === true)
   addOp('lower', config.lowercase === true)
-  addOp('trim', config.trim === true)
+  // 下拉选择 trim 与布尔开关 trim 都表示去空白：此前只认布尔项，
+  // 导致界面上选「去除首尾空白」实际不做任何处理
+  addOp('trim', config.trim === true || operation === 'trim')
 
   let result = text
   let parts: string[] | undefined
-
-  const operation = String(config.operation || '')
 
   if (operation === 'replace') {
     const search = String(config.search || '')

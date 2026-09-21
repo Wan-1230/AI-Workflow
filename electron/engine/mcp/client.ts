@@ -51,12 +51,15 @@ export class McpClient {
   private pending = new Map<number, { resolve: (res: JsonRpcResponse) => void; reject: (err: Error) => void }>()
   private nextId = 1
   private serverUrl: string | null = null
+  /** 进程异常后置为 true：连接不可再用，但错误以可控 reject 形式交付而非崩进程 */
+  private dead = false
 
   constructor(config: McpServerConfig) {
     this.config = config
   }
 
   get isConnected(): boolean {
+    if (this.dead) return false
     return Boolean(this.proc) || Boolean(this.serverUrl)
   }
 
@@ -90,7 +93,11 @@ export class McpClient {
       if (text) console.error(`[mcp:stderr] ${text.slice(0, 500)}`)
     })
     this.proc.on('error', err => {
-      throw new McpError(`MCP 进程启动失败: ${err.message}`)
+      // 事件回调内抛异常属于未捕获异常，会直接终止整个主进程；
+      // 这里必须走 reject + 标记失效，让调用方拿到可控错误。
+      this.dead = true
+      this.rejectAll(new McpError(`MCP 进程错误: ${err.message}`))
+      this.proc = null
     })
     this.proc.on('exit', code => {
       this.rejectAll(new McpError(`MCP 进程退出 (code: ${code})`))
@@ -149,23 +156,32 @@ export class McpClient {
 
   private request(method: string, params: Record<string, unknown>): Promise<JsonRpcResponse> {
     return new Promise((resolve, reject) => {
-      if (!this.proc) {
-        reject(new McpError('MCP 未连接'))
+      if (this.dead || !this.proc) {
+        reject(new McpError(this.dead ? 'MCP 连接已失效' : 'MCP 未连接'))
         return
       }
       const id = this.nextId++
-      this.pending.set(id, { resolve, reject })
-
-      const req: JsonRpcRequest = { jsonrpc: '2.0', id, method, params }
-      this.proc.stdin.write(JSON.stringify(req) + '\n')
-
       const timeout = this.config.timeoutMs ?? 30000
-      setTimeout(() => {
+
+      // 结算时清除定时器，否则每次调用都会留下最长 timeout 的悬挂定时器
+      const timer = setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id)
           reject(new McpError(`MCP 请求超时 (${method}, ${timeout}ms)`))
         }
       }, timeout)
+      const settle = (fn: () => void) => {
+        clearTimeout(timer)
+        fn()
+      }
+
+      this.pending.set(id, {
+        resolve: res => settle(() => resolve(res)),
+        reject: err => settle(() => reject(err))
+      })
+
+      const req: JsonRpcRequest = { jsonrpc: '2.0', id, method, params }
+      this.proc.stdin.write(JSON.stringify(req) + '\n')
     })
   }
 

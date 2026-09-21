@@ -2,7 +2,13 @@ import type { WorkflowNode, ExecutionContext, RetryConfig } from '@shared/workfl
 import type { NodeExecuteFn } from '@shared/node'
 import { nodeRegistry } from '../nodes'
 
-const DEFAULT_TIMEOUT = 30000 // 30秒默认超时
+/**
+ * 兜底默认超时。曾经为 30s，而前端从不设置 executionConfig，
+ * 于是任何一次较长的 LLM 回复或文档入库都必然超时。
+ * 实际取值见 executeNode：取「全局设置」与「节点目录声明上限」的较大者，
+ * 因此用户可以把超时调高，但不会把 AI 类节点掐回到它的真实耗时需求之下。
+ */
+const FALLBACK_TIMEOUT = 120000 // 120 秒
 
 /**
  * 节点执行器
@@ -12,6 +18,9 @@ const DEFAULT_TIMEOUT = 30000 // 30秒默认超时
  * - 注入全局变量、模型运行时信息、流式输出回调
  */
 export class Executor {
+  /** 全局默认超时（ms），由主进程在启动与设置变更时从应用设置注入 */
+  defaultTimeout = FALLBACK_TIMEOUT
+
   async executeNode(
     node: WorkflowNode,
     context: ExecutionContext,
@@ -23,9 +32,10 @@ export class Executor {
       throw new Error(`未知的节点类型: ${node.type}。可用的类型: ${[...nodeRegistry.keys()].join(', ')}`)
     }
 
-    // 获取超时和重试配置
+    // 获取超时和重试配置：显式配置 > max(全局设置, 节点目录声明的上限)
     const execConfig = node.executionConfig || {}
-    const timeout = execConfig.timeout ?? DEFAULT_TIMEOUT
+    const declaredLimit = registered.definition.executionLimits?.timeoutMs ?? 0
+    const timeout = execConfig.timeout ?? Math.max(this.defaultTimeout, declaredLimit)
     const retryConfig = execConfig.retry
 
     // 带重试的执行

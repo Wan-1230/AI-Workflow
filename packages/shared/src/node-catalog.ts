@@ -123,7 +123,10 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       separator: ',',
       start: 0,
       end: 100,
-      uppercase: false
+      pattern: '',
+      flags: 'g',
+      uppercase: false,
+      lowercase: false
     },
     fields: [
       { key: 'text', label: '输入文本', type: 'textarea', rows: 4, help: '支持 {{nodeId.field}} 插值' },
@@ -132,12 +135,15 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
         { value: 'split', label: '按分隔符拆分' }, { value: 'slice', label: '截取片段' },
         { value: 'join', label: '数组转文本' }, { value: 'regex', label: '正则提取' }
       ] },
-      { key: 'search', label: '查找内容', type: 'text', help: 'replace / regex 操作使用' },
+      { key: 'search', label: '查找内容', type: 'text', help: 'replace 操作使用' },
       { key: 'replacement', label: '替换为', type: 'text', help: 'replace 操作使用' },
       { key: 'separator', label: '分隔符', type: 'text', help: 'split / join 操作使用，默认逗号' },
       { key: 'start', label: '起始位置', type: 'number', help: 'slice 操作使用' },
-      { key: 'end', label: '结束位置', type: 'number', help: 'slice 操作使用' },
-      { key: 'uppercase', label: '转大写', type: 'boolean' }
+      { key: 'end', label: '结束位置', type: 'number', help: 'slice 操作使用，留空到末尾' },
+      { key: 'pattern', label: '正则表达式', type: 'text', help: 'regex 操作使用，如 \\d+' },
+      { key: 'flags', label: '正则修饰符', type: 'text', help: 'regex 操作使用，默认 g' },
+      { key: 'uppercase', label: '转大写', type: 'boolean' },
+      { key: 'lowercase', label: '转小写', type: 'boolean' }
     ],
     outputs: [
       { name: 'text', label: '处理结果', type: 'string' },

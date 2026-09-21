@@ -138,8 +138,13 @@ function setupIPC() {
       }
 
       currentExecutionId = `exec_${Date.now()}`
+      const runStartedAt = Date.now()
+      let runFinishedAt = 0
 
       const onEvent = (evt: ExecutionEvent) => {
+        if (evt.type === 'workflow:complete' || evt.type === 'workflow:cancelled') {
+          runFinishedAt = evt.timestamp
+        }
         mainWindow?.webContents.send('execution:update', evt)
       }
 
@@ -164,20 +169,26 @@ function setupIPC() {
         resultObj[key] = value
       }
 
-      // 保存执行历史
-      const hasError = [...result.values()].some(r => r.status === 'error')
-      const wasCancelled = [...result.values()].some(r => r.status === 'cancelled')
-      try {
-        executionStorage?.saveExecution({
-          id: currentExecutionId,
-          workflowId: wf.id || 'unknown',
-          workflowName: wf.name || '未命名',
-          status: wasCancelled ? 'cancelled' : hasError ? 'error' : 'completed',
-          startedAt: Date.now() - 1, // 近似值
-          finishedAt: Date.now(),
-          nodeResults: result
-        })
-      } catch { /* 存储失败不影响主流程 */ }
+      // 保存执行历史：受 saveHistory 开关控制，且保留策略在此生效
+      if (settingsStore?.getAll().saveHistory !== false) {
+        const hasError = [...result.values()].some(r => r.status === 'error')
+        const wasCancelled = [...result.values()].some(r => r.status === 'cancelled')
+        try {
+          executionStorage?.saveExecution({
+            id: currentExecutionId,
+            workflowId: wf.id || 'unknown',
+            workflowName: wf.name || '未命名',
+            status: wasCancelled ? 'cancelled' : hasError ? 'error' : 'completed',
+            startedAt: runStartedAt,
+            finishedAt: runFinishedAt || Date.now(),
+            nodeResults: result
+          })
+          executionStorage?.pruneHistory()
+        } catch (err) {
+          // 历史写入失败不影响本次执行结果，但必须留痕
+          console.error('写入执行历史失败:', err)
+        }
+      }
 
       currentExecutionId = null
       return { success: true, result: resultObj }
@@ -554,6 +565,10 @@ function setupIPC() {
   ipcMain.handle('settings:update', (_event, input: AppSettingsInput) => {
     try {
       const next = settingsStore?.update(input)
+      // 超时设置对执行器即时生效，无需重启
+      if (next && typeof next.defaultTimeout === 'number') {
+        engine.setDefaultTimeout(next.defaultTimeout)
+      }
       return { success: true, data: next }
     } catch (err: unknown) {
       return { success: false, error: String(err) }
@@ -598,6 +613,15 @@ app.whenReady().then(() => {
     settingsStore = new SettingsStore()
   } catch (err) {
     console.error('初始化设置存储失败:', err)
+  }
+
+  // 应用与超时相关的全局设置：设置项此前只落库不被读取，故在此接线
+  try {
+    const settings = settingsStore?.getAll()
+    if (settings?.defaultTimeout) engine.setDefaultTimeout(settings.defaultTimeout)
+    executionStorage?.pruneHistory()
+  } catch (err) {
+    console.error('应用全局设置失败:', err)
   }
 
   setupIPC()

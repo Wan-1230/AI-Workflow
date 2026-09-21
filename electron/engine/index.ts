@@ -22,6 +22,14 @@ export class WorkflowEngine {
   private activeAborts = new Map<string, AbortController>()
 
   /**
+   * 注入全局默认超时（来自应用设置的 defaultTimeout）。
+   * 该设置项曾长期只存在于设置页而无人读取，故显式接线。
+   */
+  setDefaultTimeout(ms: number): void {
+    if (Number.isFinite(ms) && ms > 0) this.executor.defaultTimeout = ms
+  }
+
+  /**
    * 取消正在执行的工作流
    */
   cancel(executionId: string): boolean {
@@ -95,10 +103,7 @@ export class WorkflowEngine {
     // 5. 按组执行（组内并行，组间串行）
     for (const group of parallelGroups) {
       // 检查取消信号
-      if (signal.aborted) {
-        this.emitCancelled(onEvent, activeNodes, nodeResults)
-        break
-      }
+      if (signal.aborted) break
 
       // 过滤出本组中仍然激活的节点
       const activeInGroup = group.filter(id => activeNodes.has(id))
@@ -121,7 +126,12 @@ export class WorkflowEngine {
       if (hasFatalError) break
     }
 
-    // 6. 工作流完成/取消
+    // 6. 取消收尾：无条件回写，避免最后一组并行节点既不产出结果也扫不到
+    if (signal.aborted) {
+      this.emitCancelled(onEvent, activeNodes, nodeResults)
+    }
+
+    // 7. 工作流完成/取消
     const finalStatus = signal.aborted ? 'workflow:cancelled' : 'workflow:complete'
     onEvent({
       type: finalStatus as ExecutionEvent['type'],
@@ -154,11 +164,10 @@ export class WorkflowEngine {
     if (abortController.signal.aborted) return
 
     // 触发节点开始事件
-    onEvent({ type: 'node:start', nodeId, timestamp: Date.now() })
+    const startTime = Date.now()
+    onEvent({ type: 'node:start', nodeId, timestamp: startTime })
 
     try {
-      const startTime = Date.now()
-
       // 收集上游节点的输出作为输入
       const inputs: Record<string, unknown> = {}
       const incomingEdges = wf.edges.filter(e => e.target === nodeId)
@@ -214,7 +223,7 @@ export class WorkflowEngine {
         status: 'error',
         output: {},
         error: message,
-        duration: 0
+        duration: Date.now() - startTime
       }
       nodeResults.set(nodeId, errorResult)
 
@@ -362,7 +371,10 @@ export class WorkflowEngine {
   }
 
   /**
-   * 发射取消事件
+   * 取消收尾：为尚未产出结果的活跃节点写入 cancelled 终态。
+   *
+   * 必须同时写 nodeResults 与发事件：只发事件会让结果图里没有 cancelled 记录，
+   * 而持久化侧依据结果图推导状态，导致被取消的执行在历史里显示为「已完成」。
    */
   private emitCancelled(
     onEvent: (event: ExecutionEvent) => void,
@@ -370,9 +382,15 @@ export class WorkflowEngine {
     nodeResults: Map<string, NodeResult>
   ): void {
     for (const nodeId of activeNodes) {
-      if (!nodeResults.has(nodeId)) {
-        onEvent({ type: 'node:cancelled', nodeId, timestamp: Date.now() })
-      }
+      if (nodeResults.has(nodeId)) continue
+      nodeResults.set(nodeId, {
+        nodeId,
+        status: 'cancelled',
+        output: {},
+        error: '执行已取消',
+        duration: 0
+      })
+      onEvent({ type: 'node:cancelled', nodeId, timestamp: Date.now() })
     }
   }
 }

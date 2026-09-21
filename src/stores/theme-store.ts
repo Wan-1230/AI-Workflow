@@ -30,8 +30,11 @@ function applyTheme(mode: ThemeMode): void {
   } catch { /* 忽略写入失败 */ }
 }
 
-interface ThemeStore {
-  mode: ThemeMode
+/** 系统偏好监听器句柄，供重复 init 时撤销上一次注册 */
+let systemQuery: MediaQueryList | null = null
+let systemHandler: (() => void) | null = null
+
+interface ThemeStore {  mode: ThemeMode
   /** 当前实际生效的主题（light | dark） */
   resolved: 'light' | 'dark'
   setMode: (mode: ThemeMode) => void
@@ -48,14 +51,22 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     const mode = loadStoredTheme()
     applyTheme(mode)
     set({ mode, resolved: resolveTheme(mode) })
-    // 跟随系统偏好变化（仅 'system' 模式时生效）
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+
+    // 跟随系统偏好变化（仅 'system' 模式时生效）。
+    // init 可能被重复调用（StrictMode 下 effect 执行两次），
+    // 因此注册前先撤销上一次的监听，避免监听器不断累积。
+    if (systemQuery && systemHandler) {
+      systemQuery.removeEventListener('change', systemHandler)
+    }
+    systemHandler = () => {
       const m = get().mode
       if (m === 'system') {
         applyTheme(m)
         set({ resolved: resolveTheme(m) })
       }
-    })
+    }
+    systemQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    systemQuery.addEventListener('change', systemHandler)
   },
 
   setMode: (mode) => {

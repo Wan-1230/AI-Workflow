@@ -140,8 +140,9 @@ export function SettingsPage() {
                 label="单节点默认超时 (ms)"
                 type="number"
                 min="1000"
+                help="AI / RAG / Agent 类节点另有更高下限，不会被此值掐短"
                 value={String(settings.defaultTimeout)}
-                onChange={e => patch({ defaultTimeout: Number(e.target.value) || 30000 })}
+                onChange={e => patch({ defaultTimeout: Number(e.target.value) || 120000 })}
               />
               <Switch
                 label="调试模式"
@@ -155,7 +156,7 @@ export function SettingsPage() {
           {/* 恢复默认 */}
           <div className="flex justify-end">
             <Button variant="ghost" size="sm" icon={<RotateCcw size={13} />}
-              onClick={() => { patch({ theme: 'system', language: 'zh-CN', debugMode: false, defaultTimeout: 30000, saveHistory: true }) }}>
+              onClick={() => { patch({ theme: 'system', language: 'zh-CN', debugMode: false, defaultTimeout: 120000, saveHistory: true }) }}>
               恢复默认值
             </Button>
           </div>

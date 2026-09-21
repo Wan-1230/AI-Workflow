@@ -338,7 +338,7 @@ function CreateProjectForm({
         <Button
           variant="primary"
           loading={loading}
-          disabled={!name.trim() && loading}
+          disabled={!name.trim() || loading}
           onClick={() => onCreate(templateId, name || (selected?.name || '未命名工作流'), description)}
         >
           创建并打开
