@@ -104,7 +104,9 @@ export class Executor {
     timeout: number
   ): Promise<Record<string, unknown>> {
     // 解析配置中的模板变量 {{nodeId.field}} / {{global.KEY}} 等
-    const resolvedConfig = this.resolveTemplates(node.config, context)
+    const resolvedConfig = this.resolveTemplates(
+      node.config, context, inputs, node.id, nodeRegistry.get(node.type)?.definition.fields
+    )
 
     // 每次尝试持有独立控制器：超时或被取消时真正 abort，使节点内部的
     // fetch / Worker / 子进程随之终止。此前用 Promise.race 放弃等待，
@@ -176,20 +178,41 @@ export class Executor {
    * 将 {{nodeId.outputField}} 替换为上游节点的实际输出值
    * 支持嵌套路径: {{nodeId.data.items}}
    */
+  /**
+   * 模板变量插值
+   *
+   * 解析不到时抛错而非原样返回。原样返回会让下游拿到字面量 "{{x}}" 继续计算，
+   * 条件节点据此比较并报告成功 —— 静默出错比失败更难排查。
+   * 例外：catalog 中标记 nodeRefInterpolation:false 的字段（模板正文类）整体跳过，
+   * 其占位符由节点自身语义解释（{{item}} / {{varName}} 等）。
+   */
   private resolveTemplates(
     config: Record<string, unknown>,
-    context: ExecutionContext
+    context: ExecutionContext,
+    inputs: Record<string, unknown>,
+    nodeId: string,
+    fields?: { key: string; nodeRefInterpolation?: boolean }[]
   ): Record<string, unknown> {
     const result: Record<string, unknown> = {}
 
     for (const [key, value] of Object.entries(config)) {
+      const label = `${nodeId}.${key}`
+
+      if (fields?.some(f => f.key === key && f.nodeRefInterpolation === false)) {
+        result[key] = value
+        continue
+      }
+
       if (typeof value === 'string') {
-        result[key] = this.resolveString(value, context)
+        result[key] = this.resolveString(value, context, inputs, nodeId, key)
       } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        result[key] = this.resolveTemplates(value as Record<string, unknown>, context)
+        // 嵌套对象沿用它自己的路径作为前缀，错误信息可定位到 n1.headers.Authorization 一级
+        result[key] = this.resolveTemplates(
+          value as Record<string, unknown>, context, inputs, label, undefined
+        )
       } else if (Array.isArray(value)) {
         result[key] = value.map(item =>
-          typeof item === 'string' ? this.resolveString(item, context) : item
+          typeof item === 'string' ? this.resolveString(item, context, inputs, nodeId, key) : item
         )
       } else {
         result[key] = value
@@ -199,27 +222,64 @@ export class Executor {
     return result
   }
 
-  private resolveString(value: string, context: ExecutionContext): string {
+  private resolveString(
+    value: string,
+    context: ExecutionContext,
+    inputs: Record<string, unknown>,
+    nodeId: string,
+    fieldKey: string
+  ): string {
+    const label = `${nodeId}.${fieldKey}`
+
     // 匹配 {{expression}} 模式
     return value.replace(/\{\{([^}]+)\}\}/g, (_match, expr: string) => {
       const trimmed = expr.trim()
 
+      // 0. 上游输入聚合引用: {{input}} / {{input.path}}
+      if (trimmed === 'input' || trimmed.startsWith('input.')) {
+        const keys = Object.keys(inputs)
+        const base = keys.length === 1 ? inputs[keys[0]] : inputs
+        const resolved = trimmed === 'input'
+          ? base
+          : this.getNestedValue(base as Record<string, unknown>, trimmed.slice('input.'.length))
+
+        if (resolved === undefined) {
+          throw new Error(`无法解析引用 {{${trimmed}}}（${label}）：当前节点没有可用的上游输入`)
+        }
+        return typeof resolved === 'object' && resolved !== null
+          ? JSON.stringify(resolved)
+          : String(resolved)
+      }
+
       // 1. 全局变量引用: {{global.KEY}}（variable-set 节点写入，跨节点传递）
       if (trimmed.startsWith('global.')) {
         const key = trimmed.slice('global.'.length)
-        return context.variables[key] ?? `{{${trimmed}}}`
+        const found = context.variables[key]
+        if (found === undefined) {
+          throw new Error(`无法解析引用 {{${trimmed}}}（${label}）：全局变量 "${key}" 未定义，请先用「变量设置」节点写入或检查拼写`)
+        }
+        return found
       }
 
       // 2. 凭证引用: {{credentials.KEY}}
       if (trimmed.startsWith('credentials.')) {
         const key = trimmed.slice('credentials.'.length)
-        return context.secrets[key] ?? `{{${trimmed}}}`
+        const found = context.secrets[key]
+        if (found === undefined) {
+          throw new Error(`无法解析引用 {{${trimmed}}}（${label}）：凭证 "${key}" 不存在或无法解密，请在「设置 → 安全凭证」中确认`)
+        }
+        return found
       }
 
-      // 3. 环境变量: {{env.VAR}}
+      // 3. 环境变量: {{env.VAR}} —— 允许缺省，按空串处理并告警
       if (trimmed.startsWith('env.')) {
         const varName = trimmed.slice('env.'.length)
-        return process.env[varName] ?? `{{${trimmed}}}`
+        const found = process.env[varName]
+        if (found === undefined) {
+          context.logger(nodeId, `环境变量 ${varName} 未定义，${label} 按空值处理`)
+          return ''
+        }
+        return found
       }
 
       // 4. 内置函数: {{json(nodeId.path)}}
@@ -250,7 +310,7 @@ export class Executor {
       }
 
       // 8. 普通节点输出引用: {{nodeId}} 或 {{nodeId.path.to.value}}
-      return this.resolveNodeReference(trimmed, context)
+      return this.resolveNodeReference(trimmed, context, label)
     })
   }
 
@@ -274,28 +334,28 @@ export class Executor {
     return undefined
   }
 
-  private resolveNodeReference(expr: string, context: ExecutionContext): string {
+  private resolveNodeReference(expr: string, context: ExecutionContext, label: string): string {
     const dotIndex = expr.indexOf('.')
-    if (dotIndex === -1) {
-      // {{nodeId}} — 返回整个 output 的 JSON
-      const nodeResult = context.nodeResults.get(expr)
-      if (nodeResult && nodeResult.status === 'success') {
-        return JSON.stringify(nodeResult.output)
-      }
-      return `{{${expr}}}`
-    }
-
-    const nodeId = expr.slice(0, dotIndex)
-    const path = expr.slice(dotIndex + 1)
+    const nodeId = dotIndex === -1 ? expr : expr.slice(0, dotIndex)
+    const path = dotIndex === -1 ? '' : expr.slice(dotIndex + 1)
     const nodeResult = context.nodeResults.get(nodeId)
 
-    if (nodeResult && nodeResult.status === 'success') {
-      const fieldValue = this.getNestedValue(nodeResult.output, path)
-      if (fieldValue !== undefined) {
-        return typeof fieldValue === 'object' ? JSON.stringify(fieldValue) : String(fieldValue)
-      }
+    if (!nodeResult) {
+      throw new Error(`无法解析引用 {{${expr}}}（${label}）：不存在节点 "${nodeId}"，或该节点尚未执行`)
     }
-    return `{{${expr}}}`
+    if (nodeResult.status !== 'success') {
+      throw new Error(`无法解析引用 {{${expr}}}（${label}）：节点 "${nodeId}" 状态为 ${nodeResult.status}，无可用输出`)
+    }
+    if (!path) return JSON.stringify(nodeResult.output)
+
+    const fieldValue = this.getNestedValue(nodeResult.output, path)
+    if (fieldValue === undefined) {
+      const available = Object.keys(nodeResult.output).join('/') || '无'
+      throw new Error(`无法解析引用 {{${expr}}}（${label}）：节点 "${nodeId}" 没有输出字段 "${path}"，可用字段：${available}`)
+    }
+    return typeof fieldValue === 'object' && fieldValue !== null
+      ? JSON.stringify(fieldValue)
+      : String(fieldValue)
   }
 
   /**
