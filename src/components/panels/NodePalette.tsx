@@ -1,21 +1,21 @@
 import { useState } from 'react'
 import { Search, Grid3X3 } from 'lucide-react'
-import { nodeCategories, type UINodeDefinition } from '../../stores/node-definitions'
+import { nodeCategories, type NodeDefinition } from '@shared/node-catalog'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { toast } from '../../stores/toast-store'
 
 /** 可拖拽节点项：拖拽到画布创建 */
-function DragNode({ node }: { node: UINodeDefinition }) {
+function DragNode({ node }: { node: NodeDefinition }) {
   return (
     <div
       draggable
       onDragStart={e => {
-        e.dataTransfer.setData('application/reactflow-type', node.type)
+        e.dataTransfer.setData('application/reactflow-type', node.id)
         e.dataTransfer.effectAllowed = 'move'
       }}
       onDoubleClick={() => {
         const { addNode } = useWorkflowStore.getState()
-        addNode(node.type, { x: 120 + Math.random() * 160, y: 120 + Math.random() * 120 })
+        addNode(node.id, { x: 120 + Math.random() * 160, y: 120 + Math.random() * 120 })
         toast.success(`已添加「${node.displayName}」`)
       }}
       className="group flex items-start gap-2.5 px-3 py-2.5 rounded-lg cursor-grab active:cursor-grabbing
@@ -43,7 +43,7 @@ export function NodePalette() {
     .map(c => ({
       ...c,
       nodes: c.nodes.filter(n =>
-        !q || n.displayName.toLowerCase().includes(q.toLowerCase()) || n.description.includes(q) || n.type.includes(q)
+        !q || n.displayName.toLowerCase().includes(q.toLowerCase()) || n.description.includes(q) || n.id.includes(q)
       )
     }))
     .filter(c => c.nodes.length > 0)
@@ -79,7 +79,7 @@ export function NodePalette() {
                 <span className="text-2xs text-fg-faint font-mono ml-auto">{cat.nodes.length}</span>
               </div>
               <div className="space-y-0.5">
-                {cat.nodes.map(n => <DragNode key={n.type} node={n} />)}
+                {cat.nodes.map(n => <DragNode key={n.id} node={n} />)}
               </div>
             </div>
           ))}

@@ -1,27 +1,4 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
-
-export const definition: NodeDefinition = {
-  id: 'condition',
-  category: 'logic',
-  displayName: '条件分支',
-  description: '根据条件表达式选择分支路径',
-  icon: '🔀',
-  color: '#eab308',
-  inputs: [
-    { name: 'left', label: '左值', type: 'any' },
-    { name: 'right', label: '右值', type: 'any' },
-    { name: 'operator', label: '运算符', type: 'string' }
-  ],
-  outputs: [
-    { name: 'result', label: '判断结果', type: 'boolean' },
-    { name: 'branch', label: '分支', type: 'string' }
-  ],
-  defaultConfig: {
-    left: '{{input}}',
-    right: '',
-    operator: 'equals'
-  }
-}
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 
 export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const left = ctx.config.left ?? ctx.inputs.left ?? ''

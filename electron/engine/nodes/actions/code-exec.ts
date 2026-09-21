@@ -1,28 +1,8 @@
 import { Worker } from 'worker_threads'
 import { join } from 'path'
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 
 const CODE_TIMEOUT = 10000 // 10秒代码执行超时
-
-export const definition: NodeDefinition = {
-  id: 'code-exec',
-  category: 'action',
-  displayName: '代码执行',
-  description: '在安全沙箱中执行 JavaScript 代码',
-  icon: '💻',
-  color: '#22c55e',
-  inputs: [
-    { name: 'code', label: '代码', type: 'string' },
-    { name: 'context', label: '上下文数据', type: 'object' }
-  ],
-  outputs: [
-    { name: 'result', label: '执行结果', type: 'any' },
-    { name: 'logs', label: '日志输出', type: 'string' }
-  ],
-  defaultConfig: {
-    code: '// 输入数据在 input 变量中\n// 用 return 返回结果\nconst result = input;\nreturn { result };'
-  }
-}
 
 export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const code = (ctx.config.code as string) || 'return { result: "no code" }'

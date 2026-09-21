@@ -1,28 +1,5 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 
-export const definition: NodeDefinition = {
-  id: 'loop',
-  category: 'logic',
-  displayName: '循环执行',
-  description: '遍历数组，对每一项渲染模板/处理（支持 {{item}} {{item.field}} {{index}}）',
-  icon: '🔁',
-  color: '#f59e0b',
-  inputs: [
-    { name: 'items', label: '数组数据', type: 'object' },
-    { name: 'template', label: '每项处理模板', type: 'string' }
-  ],
-  outputs: [
-    { name: 'results', label: '处理结果数组', type: 'object' },
-    { name: 'count', label: '迭代次数', type: 'number' },
-    { name: 'items', label: '输入数组', type: 'object' }
-  ],
-  defaultConfig: {
-    itemsSource: '{{nodeId.items}}',
-    template: '第 {{index}} 项: {{item}}',
-    /** 处理方式：template 渲染 / code 表达式 */
-    mode: 'template'
-  }
-}
 
 /**
  * 循环节点：对输入数组逐项执行模板渲染

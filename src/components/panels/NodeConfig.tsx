@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Trash2, Settings2, Variable } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
-import { nodeDefinitions, type UIFieldSchema } from '../../stores/node-definitions'
+import { nodeCatalog, type NodeFieldSchema } from '@shared/node-catalog'
 import { Input, Textarea, Select, Switch, IconButton, Spinner } from '../../components/ui'
 import type { ModelConfig } from '@shared/model'
 
 /**
  * 节点配置面板（schema 驱动）
- * - 依据 nodeDefinitions 中 fields 定义渲染表单
+ * - 依据 @shared/node-catalog 的 fields 定义渲染表单
  * - modelId 字段动态加载模型库选项
  * - 提供上游输出引用（变量）快速插入
  */
 export function NodeConfig() {
   const { nodes, selectedNodeId, updateNodeData, updateNodeConfig, removeNode } = useWorkflowStore()
   const selectedNode = nodes.find(n => n.id === selectedNodeId)
-  const def = selectedNode ? nodeDefinitions[selectedNode.data.nodeType as string] : null
+  const def = selectedNode ? nodeCatalog[selectedNode.data.nodeType as string] : null
 
   const [models, setModels] = useState<ModelConfig[] | null>(null)
 
@@ -63,7 +63,7 @@ export function NodeConfig() {
           </div>
           <div className="min-w-0">
             <span className="text-sm font-semibold text-fg block leading-tight truncate">{def.displayName}</span>
-            <span className="text-2xs text-fg-muted font-mono">{def.type}</span>
+            <span className="text-2xs text-fg-muted font-mono">{def.id}</span>
           </div>
         </div>
         <IconButton variant="danger" tooltip="删除节点" onClick={() => selectedNodeId && removeNode(selectedNodeId)}>
@@ -129,13 +129,13 @@ function SchemaField({
   models,
   onChange,
 }: {
-  field: UIFieldSchema
+  field: NodeFieldSchema
   value: unknown
   models: ModelConfig[] | null
   onChange: (v: unknown) => void
 }) {
-  // modelId 特殊处理：动态模型下拉
-  if (field.key === 'modelId') {
+  // 动态选项字段：由 catalog 的 dataSource 声明，不再依赖字段键名的隐式约定
+  if (field.dataSource === 'models') {
     return (
       <div>
         <label className="text-xs font-medium text-fg-secondary mb-1 block">
@@ -241,7 +241,7 @@ function VariableReferences({ nodeId, onPick }: { nodeId: string; onPick: (expr:
   if (upstream.length === 0) return null
 
   const upDef = (n: (typeof upstream)[number]) =>
-    nodeDefinitions[n.data.nodeType as string]
+    nodeCatalog[n.data.nodeType as string]
 
   return (
     <div className="rounded-lg border border-line bg-app/60 overflow-hidden">

@@ -11,7 +11,7 @@ import {
   addEdge
 } from '@xyflow/react'
 import { v4 as uuid } from 'uuid'
-import { nodeDefinitions } from './node-definitions'
+import { nodeCatalog } from '@shared/node-catalog'
 import { useAppStore } from './app-store'
 import { toast } from './toast-store'
 import type { GlobalVariable, WorkflowDefinition } from '@shared/workflow'
@@ -120,7 +120,7 @@ interface WorkflowStore {
 const MAX_HISTORY = 60
 
 function getDef(type: string) {
-  return nodeDefinitions[type]
+  return nodeCatalog[type]
 }
 
 export const useWorkflowStore = create<WorkflowStore>((set, get) => ({

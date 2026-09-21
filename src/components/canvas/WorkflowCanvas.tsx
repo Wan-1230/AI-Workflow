@@ -10,7 +10,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { BaseNode } from './nodes/BaseNode'
 import { useWorkflowStore } from '../../stores/workflow-store'
-import { nodeDefinitions } from '../../stores/node-definitions'
+import { nodeCatalog } from '@shared/node-catalog'
 
 const nodeTypes = { baseNode: BaseNode }
 
@@ -32,7 +32,7 @@ export function WorkflowCanvas() {
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const type = e.dataTransfer.getData('application/reactflow-type')
-    if (!type || !nodeDefinitions[type]) return
+    if (!type || !nodeCatalog[type]) return
     const b = wrapper.current?.getBoundingClientRect()
     if (!b) return
     const pos = rf.screenToFlowPosition({ x: e.clientX - b.left, y: e.clientY - b.top })

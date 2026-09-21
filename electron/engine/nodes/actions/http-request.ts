@@ -1,4 +1,4 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 
 const MAX_RESPONSE_SIZE = 10 * 1024 * 1024 // 10MB 响应体大小限制
 const DEFAULT_TIMEOUT = 30000 // 30秒默认超时
@@ -16,32 +16,6 @@ const PRIVATE_RANGES = [
   /^fc00:/i,
   /^fe80:/i,
 ]
-
-export const definition: NodeDefinition = {
-  id: 'http-request',
-  category: 'action',
-  displayName: 'HTTP 请求',
-  description: '发送 HTTP 请求（GET/POST/PUT/DELETE）',
-  icon: '🌐',
-  color: '#22c55e',
-  inputs: [
-    { name: 'url', label: 'URL', type: 'string' },
-    { name: 'method', label: '方法', type: 'string' },
-    { name: 'headers', label: '请求头', type: 'object' },
-    { name: 'body', label: '请求体', type: 'any' }
-  ],
-  outputs: [
-    { name: 'status', label: '状态码', type: 'number' },
-    { name: 'data', label: '响应数据', type: 'object' },
-    { name: 'headers', label: '响应头', type: 'object' }
-  ],
-  defaultConfig: {
-    url: 'https://api.github.com/zen',
-    method: 'GET',
-    headers: {},
-    body: ''
-  }
-}
 
 export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const config = ctx.config

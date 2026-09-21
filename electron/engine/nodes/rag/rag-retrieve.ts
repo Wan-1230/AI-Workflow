@@ -1,28 +1,6 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 import { vectorStore } from './rag-upload'
 
-export const definition: NodeDefinition = {
-  id: 'rag-retrieve',
-  category: 'rag',
-  displayName: '向量检索',
-  description: '基于语义相似度从向量库检索相关内容（RAG）',
-  icon: '🎯',
-  color: '#06b6d4',
-  inputs: [
-    { name: 'query', label: '检索问题', type: 'string' }
-  ],
-  outputs: [
-    { name: 'results', label: '检索结果', type: 'object' },
-    { name: 'topText', label: '最佳命中文本', type: 'string' },
-    { name: 'combined', label: '拼接上下文', type: 'string' },
-    { name: 'count', label: '命中数', type: 'number' }
-  ],
-  defaultConfig: {
-    query: '',
-    topK: 5,
-    minScore: 0.05
-  }
-}
 
 export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const config = ctx.config

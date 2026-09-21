@@ -1,27 +1,6 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 import { parseTemplateVariables } from '../../storage/prompts'
 
-export const definition: NodeDefinition = {
-  id: 'prompt-template',
-  category: 'ai',
-  displayName: '提示词模板',
-  description: '渲染提示词模板（支持 {{变量}} 占位符）',
-  icon: '📝',
-  color: '#8b5cf6',
-  inputs: [
-    { name: 'template', label: '模板内容', type: 'string' },
-    { name: 'variables', label: '变量', type: 'object' }
-  ],
-  outputs: [
-    { name: 'text', label: '渲染结果', type: 'string' },
-    { name: 'variables', label: '变量列表', type: 'object' },
-    { name: 'missing', label: '缺失变量', type: 'object' }
-  ],
-  defaultConfig: {
-    template: '请帮我总结以下内容：\n{{input.text}}',
-    variables: '{"input.text": "要总结的文本"}'
-  }
-}
 
 export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const template = String(ctx.config.template || '')

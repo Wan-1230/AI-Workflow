@@ -1,68 +1,72 @@
-import type { RegisteredNode } from '@shared/node'
+import type { NodeExecuteFn, RegisteredNode } from '@shared/node'
+import { nodeCatalog } from '@shared/node-catalog'
 
-// 全局节点注册表
+// ---------- 触发器 ----------
+import { execute as manualTriggerExec } from './triggers/manual-trigger'
+
+// ---------- 动作 ----------
+import { execute as httpRequestExec } from './actions/http-request'
+import { execute as codeExecExec } from './actions/code-exec'
+import { execute as notificationExec } from './actions/notification'
+import { execute as textProcessExec } from './actions/text-process'
+import { execute as fileIoExec } from './actions/file-io'
+
+// ---------- 逻辑 ----------
+import { execute as conditionExec } from './logic/condition'
+import { execute as loopExec } from './logic/loop'
+import { execute as variableSetExec } from './logic/variable-set'
+import { execute as subWorkflowExec } from './logic/sub-workflow'
+
+// ---------- AI ----------
+import { execute as llmCallExec } from './ai/llm-call'
+import { execute as promptTemplateExec } from './ai/prompt-template'
+
+// ---------- Agent ----------
+import { execute as toolCallExec } from './agent/tool-call'
+import { execute as agentDelegateExec } from './agent/agent-delegate'
+
+// ---------- RAG ----------
+import { execute as ragUploadExec } from './rag/rag-upload'
+import { execute as ragRetrieveExec } from './rag/rag-retrieve'
+
+/** 节点实现。元数据一律来自 @shared/node-catalog，此处只登记执行函数。 */
+const executors: Record<string, NodeExecuteFn> = {
+  'manual-trigger': manualTriggerExec,
+  'http-request': httpRequestExec,
+  'code-exec': codeExecExec,
+  'notification': notificationExec,
+  'text-process': textProcessExec,
+  'file-io': fileIoExec,
+  'condition': conditionExec,
+  'loop': loopExec,
+  'variable-set': variableSetExec,
+  'sub-workflow': subWorkflowExec,
+  'llm-call': llmCallExec,
+  'prompt-template': promptTemplateExec,
+  'tool-call': toolCallExec,
+  'agent-delegate': agentDelegateExec,
+  'rag-upload': ragUploadExec,
+  'rag-retrieve': ragRetrieveExec
+}
+
+/**
+ * 全局节点注册表 —— 由 catalog 装配。
+ *
+ * catalog 与 executors 必须严格互相覆盖：任一侧多出条目都属于配置漂移，
+ * 在启动期直接失败，而不是等到用户点击某个节点时才暴露。
+ */
 export const nodeRegistry = new Map<string, RegisteredNode>()
 
-// ---------- 手动触发器 ----------
-import { definition as manualTriggerDef, execute as manualTriggerExec } from './triggers/manual-trigger'
-nodeRegistry.set('manual-trigger', { definition: manualTriggerDef, execute: manualTriggerExec })
+for (const [id, definition] of Object.entries(nodeCatalog)) {
+  const execute = executors[id]
+  if (!execute) {
+    throw new Error(`节点目录声明了 "${id}" 但缺少 execute 实现（electron/engine/nodes/index.ts）`)
+  }
+  nodeRegistry.set(id, { definition, execute })
+}
 
-// ---------- HTTP 请求 ----------
-import { definition as httpRequestDef, execute as httpRequestExec } from './actions/http-request'
-nodeRegistry.set('http-request', { definition: httpRequestDef, execute: httpRequestExec })
-
-// ---------- 代码执行 ----------
-import { definition as codeExecDef, execute as codeExecExec } from './actions/code-exec'
-nodeRegistry.set('code-exec', { definition: codeExecDef, execute: codeExecExec })
-
-// ---------- 条件分支 ----------
-import { definition as conditionDef, execute as conditionExec } from './logic/condition'
-nodeRegistry.set('condition', { definition: conditionDef, execute: conditionExec })
-
-// ---------- 通知 ----------
-import { definition as notificationDef, execute as notificationExec } from './actions/notification'
-nodeRegistry.set('notification', { definition: notificationDef, execute: notificationExec })
-
-// ---------- LLM 调用 ----------
-import { definition as llmCallDef, execute as llmCallExec } from './ai/llm-call'
-nodeRegistry.set('llm-call', { definition: llmCallDef, execute: llmCallExec })
-
-// ---------- 提示词模板 ----------
-import { definition as promptTemplateDef, execute as promptTemplateExec } from './ai/prompt-template'
-nodeRegistry.set('prompt-template', { definition: promptTemplateDef, execute: promptTemplateExec })
-
-// ---------- 文本处理 ----------
-import { definition as textProcessDef, execute as textProcessExec } from './actions/text-process'
-nodeRegistry.set('text-process', { definition: textProcessDef, execute: textProcessExec })
-
-// ---------- 文件读写 ----------
-import { definition as fileIoDef, execute as fileIoExec } from './actions/file-io'
-nodeRegistry.set('file-io', { definition: fileIoDef, execute: fileIoExec })
-
-// ---------- 变量设置 ----------
-import { definition as variableSetDef, execute as variableSetExec } from './logic/variable-set'
-nodeRegistry.set('variable-set', { definition: variableSetDef, execute: variableSetExec })
-
-// ---------- 循环 ----------
-import { definition as loopDef, execute as loopExec } from './logic/loop'
-nodeRegistry.set('loop', { definition: loopDef, execute: loopExec })
-
-// ---------- 子工作流（实际递归执行由引擎处理） ----------
-import { definition as subWorkflowDef, execute as subWorkflowExec } from './logic/sub-workflow'
-nodeRegistry.set('sub-workflow', { definition: subWorkflowDef, execute: subWorkflowExec })
-
-// ---------- 工具调用 ----------
-import { definition as toolCallDef, execute as toolCallExec } from './agent/tool-call'
-nodeRegistry.set('tool-call', { definition: toolCallDef, execute: toolCallExec })
-
-// ---------- 子 Agent 委派 ----------
-import { definition as agentDelegateDef, execute as agentDelegateExec } from './agent/agent-delegate'
-nodeRegistry.set('agent-delegate', { definition: agentDelegateDef, execute: agentDelegateExec })
-
-// ---------- 文档入库 ----------
-import { definition as ragUploadDef, execute as ragUploadExec } from './rag/rag-upload'
-nodeRegistry.set('rag-upload', { definition: ragUploadDef, execute: ragUploadExec })
-
-// ---------- 向量检索 ----------
-import { definition as ragRetrieveDef, execute as ragRetrieveExec } from './rag/rag-retrieve'
-nodeRegistry.set('rag-retrieve', { definition: ragRetrieveDef, execute: ragRetrieveExec })
+for (const id of Object.keys(executors)) {
+  if (!nodeCatalog[id]) {
+    throw new Error(`节点实现 "${id}" 未登记进节点目录（packages/shared/src/node-catalog.ts）`)
+  }
+}

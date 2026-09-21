@@ -1,25 +1,5 @@
-import type { NodeDefinition, NodeExecuteFn } from '@shared/node'
+import type { NodeExecuteFn } from '@shared/node'
 
-export const definition: NodeDefinition = {
-  id: 'sub-workflow',
-  category: 'logic',
-  displayName: '子工作流',
-  description: '嵌套调用子工作流（内嵌 JSON），支持输入输出传递',
-  icon: '📂',
-  color: '#f59e0b',
-  inputs: [
-    { name: 'workflowJson', label: '子工作流 JSON', type: 'object' },
-    { name: 'input', label: '输入数据', type: 'any' }
-  ],
-  outputs: [
-    { name: 'results', label: '子工作流结果', type: 'object' },
-    { name: 'status', label: '执行状态', type: 'string' }
-  ],
-  defaultConfig: {
-    workflowJson: '{}',
-    input: ''
-  }
-}
 
 /**
  * 子工作流节点

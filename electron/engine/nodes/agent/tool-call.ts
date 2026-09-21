@@ -1,33 +1,6 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 import { McpClient, McpError, isMcpTextContent } from '../../mcp/client'
 
-export const definition: NodeDefinition = {
-  id: 'tool-call',
-  category: 'agent',
-  displayName: '工具调用',
-  description: '调用内置工具或 MCP 协议工具（stdio / SSE）',
-  icon: '🛠️',
-  color: '#ef4444',
-  inputs: [
-    { name: 'toolName', label: '工具名', type: 'string' },
-    { name: 'arguments', label: '参数(JSON)', type: 'object' }
-  ],
-  outputs: [
-    { name: 'result', label: '工具结果', type: 'any' },
-    { name: 'tool', label: '工具名', type: 'string' },
-    { name: 'duration', label: '耗时(ms)', type: 'number' }
-  ],
-  defaultConfig: {
-    toolType: 'builtin',
-    toolName: 'http-get',
-    arguments: '{"url": "https://api.github.com/zen"}',
-    // MCP 配置
-    mcpCommand: 'npx',
-    mcpArgs: '-y @modelcontextprotocol/server-everything',
-    mcpUrl: '',
-    timeoutMs: 30000
-  }
-}
 
 /* ===== 内置工具（真实可用，不依赖外部服务） ===== */
 

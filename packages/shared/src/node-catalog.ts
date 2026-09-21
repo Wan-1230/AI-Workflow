@@ -1,41 +1,16 @@
-// 前端节点定义（与后端 nodeRegistry 一一对应，供节点面板/画布/配置面板使用）
-// icon 使用 emoji，与后端 NodeDefinition.icon 保持一致
+import type { NodeCategory, NodeDefinition } from './node'
 
-export type NodeCategory = 'trigger' | 'action' | 'logic' | 'ai' | 'agent' | 'rag'
+export type { NodeCategory, NodeDefinition, NodeFieldSchema, NodePort, NodePortType } from './node'
 
-/** 配置字段 schema（驱动 NodeConfig 面板渲染） */
-export interface UIFieldSchema {
-  key: string
-  label: string
-  type: 'text' | 'textarea' | 'number' | 'select' | 'boolean' | 'json'
-  help?: string
-  placeholder?: string
-  options?: { value: string; label: string }[]
-  rows?: number
-}
+/**
+ * 节点目录 —— 全部节点元数据的唯一事实来源。
+ *
+ * 历史上这里存在两份手工维护的副本（引擎 nodes/*\/definition 与渲染层 node-definitions.ts），
+ * 二者已发生实际漂移（如 llm-call 颜色 #8b5cf6 vs #165DFF、defaultConfig 键集不同），
+ * 且校验器另有第三份手写的类型白名单，直接导致 11 类节点被判定为「类型无效」。
+ * 本文件收敛为单一来源：引擎注册表由此装配，渲染层面板/画布/配置表单亦由此渲染。
+ */
 
-/** 节点输出字段（供配置面板变量引用提示） */
-export interface UIOutputField {
-  name: string
-  label: string
-  type: string
-}
-
-export interface UINodeDefinition {
-  type: string
-  displayName: string
-  description: string
-  category: NodeCategory
-  color: string
-  icon: string
-  defaultConfig: Record<string, unknown>
-  /** 配置面板字段顺序与类型 */
-  fields: UIFieldSchema[]
-  /** 执行后产生的输出（与后端 execute 返回一致） */
-  outputs: UIOutputField[]
-}
-
-// ===== 运算符中文映射 =====
 export const operatorLabels: Record<string, string> = {
   equals: '等于 (==)',
   not_equals: '不等于 (!=)',
@@ -48,28 +23,30 @@ export const operatorLabels: Record<string, string> = {
   is_not_empty: '不为空',
 }
 
-export const nodeDefinitions: Record<string, UINodeDefinition> = {
+const operatorOptions = Object.entries(operatorLabels).map(([value, label]) => ({ value, label }))
+
+export const nodeCatalog: Record<string, NodeDefinition> = {
   // ===== 触发器 =====
   'manual-trigger': {
-    type: 'manual-trigger',
+    id: 'manual-trigger',
+    category: 'trigger',
     displayName: '手动触发',
     description: '点击运行按钮启动工作流',
-    category: 'trigger',
-    color: '#86909C',
     icon: '⚡',
+    color: '#86909C',
     defaultConfig: {},
     fields: [],
     outputs: [{ name: 'triggered', label: '触发时间', type: 'string' }]
   },
 
-  // ===== 动作 =====
+  // ===== 工具动作 =====
   'http-request': {
-    type: 'http-request',
+    id: 'http-request',
+    category: 'action',
     displayName: 'HTTP 请求',
     description: '发送 HTTP 请求（GET / POST / PUT / DELETE）',
-    category: 'action',
-    color: '#00B42A',
     icon: '🌐',
+    color: '#00B42A',
     defaultConfig: {
       url: 'https://api.github.com/zen',
       method: 'GET',
@@ -92,12 +69,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'code-exec': {
-    type: 'code-exec',
+    id: 'code-exec',
+    category: 'action',
     displayName: '代码执行',
     description: '在沙箱中执行 JavaScript，输入在 input 变量，用 return 返回',
-    category: 'action',
-    color: '#00B42A',
     icon: '💻',
+    color: '#00B42A',
     defaultConfig: {
       code: '// 输入数据在 input 变量中\n// 用 return 返回结果\nconst result = input;\nreturn { result };'
     },
@@ -110,12 +87,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'notification': {
-    type: 'notification',
+    id: 'notification',
+    category: 'action',
     displayName: '通知输出',
     description: '在工作流日志中输出通知消息',
-    category: 'action',
-    color: '#00B42A',
     icon: '🔔',
+    color: '#00B42A',
     defaultConfig: {
       message: '工作流执行完成！',
       level: 'info'
@@ -132,12 +109,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'text-process': {
-    type: 'text-process',
+    id: 'text-process',
+    category: 'action',
     displayName: '文本处理',
     description: '替换/拆分/切片/正则等文本操作',
-    category: 'action',
-    color: '#722ED1',
     icon: '✂️',
+    color: '#722ED1',
     defaultConfig: {
       text: '',
       operation: 'trim',
@@ -169,12 +146,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'file-io': {
-    type: 'file-io',
+    id: 'file-io',
+    category: 'action',
     displayName: '文件读写',
     description: '读取或写入本地文件',
-    category: 'action',
-    color: '#86909C',
     icon: '📄',
+    color: '#86909C',
     defaultConfig: {
       mode: 'read',
       path: '',
@@ -199,14 +176,14 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
 
-  // ===== 逻辑 =====
+  // ===== 流程控制 =====
   'condition': {
-    type: 'condition',
+    id: 'condition',
+    category: 'logic',
     displayName: '条件分支',
     description: '根据条件判断路由到不同分支（True/False）',
-    category: 'logic',
-    color: '#FF7D00',
     icon: '🔀',
+    color: '#FF7D00',
     defaultConfig: {
       left: '{{input}}',
       right: '',
@@ -214,21 +191,22 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     },
     fields: [
       { key: 'left', label: '左值', type: 'text', help: '支持 {{nodeId.field}} 插值' },
-      { key: 'operator', label: '运算符', type: 'select', options: Object.entries(operatorLabels).map(([value, label]) => ({ value, label })) },
+      { key: 'operator', label: '运算符', type: 'select', options: operatorOptions },
       { key: 'right', label: '右值', type: 'text', help: 'is_empty / is_not_empty 时忽略' }
     ],
+    sourceHandles: ['true', 'false'],
     outputs: [
       { name: 'result', label: '判断结果', type: 'boolean' },
       { name: 'branch', label: '命中的分支', type: 'string' }
     ]
   },
   'loop': {
-    type: 'loop',
+    id: 'loop',
+    category: 'logic',
     displayName: '循环',
     description: '对数组逐项渲染模板，输出结果数组',
-    category: 'logic',
-    color: '#FF7D00',
     icon: '🔁',
+    color: '#FF7D00',
     defaultConfig: {
       itemsSource: '{{input}}',
       items: '[]',
@@ -248,12 +226,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'variable-set': {
-    type: 'variable-set',
+    id: 'variable-set',
+    category: 'logic',
     displayName: '变量设置',
     description: '写入全局变量，后续节点用 {{global.KEY}} 引用',
-    category: 'logic',
-    color: '#FF7D00',
     icon: '📌',
+    color: '#FF7D00',
     defaultConfig: {
       key: 'myVar',
       value: ''
@@ -268,12 +246,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'sub-workflow': {
-    type: 'sub-workflow',
+    id: 'sub-workflow',
+    category: 'logic',
     displayName: '子工作流',
     description: '嵌套执行内嵌的子工作流 JSON',
-    category: 'logic',
-    color: '#FF7D00',
     icon: '📂',
+    color: '#FF7D00',
     defaultConfig: {
       workflowJson: '{}',
       input: ''
@@ -288,14 +266,14 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
 
-  // ===== AI =====
+  // ===== 大模型 =====
   'llm-call': {
-    type: 'llm-call',
+    id: 'llm-call',
+    category: 'ai',
     displayName: 'LLM 调用',
     description: '调用大模型（OpenAI 兼容接口，支持流式输出）',
-    category: 'ai',
-    color: '#165DFF',
     icon: '🤖',
+    color: '#165DFF',
     defaultConfig: {
       modelId: '',
       systemPrompt: '你是一个有用的AI助手。',
@@ -305,13 +283,14 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
       stream: true
     },
     fields: [
-      { key: 'modelId', label: '模型配置', type: 'select', help: '留空 = 使用默认模型（需先在「模型配置」页添加）' },
+      { key: 'modelId', label: '模型配置', type: 'select', dataSource: 'models', help: '留空 = 使用默认模型（需先在「模型配置」页添加）' },
       { key: 'systemPrompt', label: '系统提示词', type: 'textarea', rows: 3 },
       { key: 'userPrompt', label: '用户提示词', type: 'textarea', rows: 5, help: '支持 {{nodeId.field}} / {{global.KEY}} 插值' },
       { key: 'temperature', label: '温度', type: 'number', help: '0~2，越高越随机' },
       { key: 'maxTokens', label: '最大 Token', type: 'number' },
       { key: 'stream', label: '流式输出', type: 'boolean', help: '开启后在运行面板实时显示输出' }
     ],
+    executionLimits: { timeoutMs: 600000 },
     outputs: [
       { name: 'text', label: '模型回复', type: 'string' },
       { name: 'model', label: '使用的模型', type: 'string' },
@@ -320,12 +299,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'prompt-template': {
-    type: 'prompt-template',
+    id: 'prompt-template',
+    category: 'ai',
     displayName: '提示词模板',
     description: '渲染模板并输出文本，可用于拼装复杂提示词',
-    category: 'ai',
-    color: '#722ED1',
     icon: '📝',
+    color: '#722ED1',
     defaultConfig: {
       template: '请帮我总结以下内容：\n{{input.text}}',
       variables: '{}'
@@ -343,12 +322,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
 
   // ===== Agent =====
   'tool-call': {
-    type: 'tool-call',
+    id: 'tool-call',
+    category: 'agent',
     displayName: '工具调用',
     description: '调用内置工具或 MCP 服务器工具',
-    category: 'agent',
-    color: '#00B42A',
     icon: '🛠️',
+    color: '#00B42A',
     defaultConfig: {
       toolType: 'builtin',
       toolName: 'http-get',
@@ -372,6 +351,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
       { key: 'mcpUrl', label: '或 MCP SSE 地址', type: 'text', placeholder: 'http://localhost:3001/sse' },
       { key: 'timeoutMs', label: '超时 (ms)', type: 'number' }
     ],
+    executionLimits: { timeoutMs: 600000 },
     outputs: [
       { name: 'result', label: '工具返回结果', type: 'any' },
       { name: 'tool', label: '使用的工具', type: 'string' },
@@ -379,12 +359,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'agent-delegate': {
-    type: 'agent-delegate',
+    id: 'agent-delegate',
+    category: 'agent',
     displayName: '子 Agent 委派',
     description: '以指定角色委派 LLM 完成子任务',
-    category: 'agent',
-    color: '#3491FA',
     icon: '🧠',
+    color: '#3491FA',
     defaultConfig: {
       task: '请分析以下数据并给出结论',
       contextData: '',
@@ -397,10 +377,11 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
       { key: 'role', label: '角色提示词', type: 'textarea', rows: 3 },
       { key: 'task', label: '任务描述', type: 'textarea', rows: 4 },
       { key: 'contextData', label: '上下文数据', type: 'textarea', rows: 4, help: '支持 {{nodeId.field}} 插值' },
-      { key: 'modelId', label: '模型配置', type: 'select', help: '留空 = 使用默认模型' },
+      { key: 'modelId', label: '模型配置', type: 'select', dataSource: 'models', help: '留空 = 使用默认模型' },
       { key: 'temperature', label: '温度', type: 'number' },
       { key: 'maxTokens', label: '最大 Token', type: 'number' }
     ],
+    executionLimits: { timeoutMs: 600000 },
     outputs: [
       { name: 'response', label: 'Agent 回复', type: 'string' },
       { name: 'task', label: '任务描述', type: 'string' },
@@ -410,12 +391,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
 
   // ===== RAG =====
   'rag-upload': {
-    type: 'rag-upload',
+    id: 'rag-upload',
+    category: 'rag',
     displayName: '文档入库',
     description: '文本/文件切分向量化，写入本地向量库',
-    category: 'rag',
-    color: '#0FC6C2',
     icon: '📚',
+    color: '#0FC6C2',
     defaultConfig: {
       source: 'text',
       text: '',
@@ -434,6 +415,7 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
       { key: 'chunkSize', label: '分块大小 (字符)', type: 'number' },
       { key: 'overlap', label: '重叠 (字符)', type: 'number', help: '相邻分块重叠，提升检索连续性' }
     ],
+    executionLimits: { timeoutMs: 600000 },
     outputs: [
       { name: 'docId', label: '文档 ID', type: 'string' },
       { name: 'chunkCount', label: '分块数', type: 'number' },
@@ -442,12 +424,12 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
     ]
   },
   'rag-retrieve': {
-    type: 'rag-retrieve',
+    id: 'rag-retrieve',
+    category: 'rag',
     displayName: '向量检索',
     description: '按语义相似度从向量库检索相关内容',
-    category: 'rag',
-    color: '#0FC6C2',
     icon: '🎯',
+    color: '#0FC6C2',
     defaultConfig: {
       query: '',
       topK: 5,
@@ -467,17 +449,27 @@ export const nodeDefinitions: Record<string, UINodeDefinition> = {
   }
 }
 
-// ===== 分类组织（供节点面板渲染） =====
-export const nodeCategories: { category: NodeCategory; label: string; color: string; nodes: UINodeDefinition[] }[] = [
-  { category: 'trigger', label: '输入输出', color: '#86909C', nodes: [] },
-  { category: 'action', label: '工具动作', color: '#00B42A', nodes: [] },
-  { category: 'logic', label: '流程控制', color: '#FF7D00', nodes: [] },
-  { category: 'ai', label: '大模型', color: '#165DFF', nodes: [] },
-  { category: 'agent', label: 'Agent', color: '#3491FA', nodes: [] },
-  { category: 'rag', label: 'RAG', color: '#0FC6C2', nodes: [] }
+export const catalogNodeTypes: string[] = Object.keys(nodeCatalog)
+
+/** 分类的展示顺序与配色（节点面板分组用） */
+export const categoryMeta: { category: NodeCategory; label: string; color: string }[] = [
+  { category: 'trigger', label: '输入输出', color: '#86909C' },
+  { category: 'action', label: '工具动作', color: '#00B42A' },
+  { category: 'logic', label: '流程控制', color: '#FF7D00' },
+  { category: 'ai', label: '大模型', color: '#165DFF' },
+  { category: 'agent', label: 'Agent', color: '#3491FA' },
+  { category: 'rag', label: 'RAG', color: '#0FC6C2' }
 ]
 
-for (const def of Object.values(nodeDefinitions)) {
-  const cat = nodeCategories.find(c => c.category === def.category)
-  if (cat) cat.nodes.push(def)
-}
+/** 按分类分组的节点，顺序即 categoryMeta 顺序 */
+export const nodeCategories: {
+  category: NodeCategory
+  label: string
+  color: string
+  nodes: NodeDefinition[]
+}[] = categoryMeta.map(meta => ({
+  ...meta,
+  nodes: catalogNodeTypes
+    .map(type => nodeCatalog[type])
+    .filter(def => def.category === meta.category)
+}))

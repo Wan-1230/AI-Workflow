@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect, useRef } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Copy, Trash2, RotateCcw } from 'lucide-react'
 import { useWorkflowStore, type ExecutionStatus } from '../../../stores/workflow-store'
+import { nodeCatalog } from '@shared/node-catalog'
 
 interface BaseNodeData {
   label: string
@@ -27,7 +28,8 @@ function BaseNodeComponent({ id, data, selected }: NodeProps) {
   const status: ExecutionStatus = execution.nodeStatuses[id] || 'idle'
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const isCondition = nd.nodeType === 'condition'
+  const branchHandles = nodeCatalog[nd.nodeType]?.sourceHandles
+  const isBranching = Boolean(branchHandles?.length)
 
   useEffect(() => {
     if (!menu) return
@@ -107,11 +109,11 @@ function BaseNodeComponent({ id, data, selected }: NodeProps) {
 
         {/* 连接点 */}
         <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !bg-fg-faint !border-2 !border-surface" />
-        {isCondition ? (
+        {isBranching ? (
           <>
-            <Handle type="source" position={Position.Bottom} id="true"
+            <Handle type="source" position={Position.Bottom} id={branchHandles![0]}
               className="!w-2.5 !h-2.5 !bg-sig-green !border-2 !border-surface" style={{ left: '30%' }} />
-            <Handle type="source" position={Position.Bottom} id="false"
+            <Handle type="source" position={Position.Bottom} id={branchHandles![1]}
               className="!w-2.5 !h-2.5 !bg-sig-red !border-2 !border-surface" style={{ left: '70%' }} />
             <span className="absolute -bottom-4 left-[22%] text-2xs text-sig-green font-mono font-bold">T</span>
             <span className="absolute -bottom-4 left-[63%] text-2xs text-sig-red font-mono font-bold">F</span>

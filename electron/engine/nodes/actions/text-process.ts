@@ -1,32 +1,5 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 
-export const definition: NodeDefinition = {
-  id: 'text-process',
-  category: 'action',
-  displayName: '文本处理',
-  description: '文本转换：替换/切分/拼接/大小写/截取/去空白',
-  icon: '🔤',
-  color: '#22c55e',
-  inputs: [
-    { name: 'text', label: '输入文本', type: 'string' },
-    { name: 'operation', label: '操作', type: 'string' }
-  ],
-  outputs: [
-    { name: 'text', label: '结果文本', type: 'string' },
-    { name: 'parts', label: '切分结果', type: 'object' },
-    { name: 'length', label: '长度', type: 'number' }
-  ],
-  defaultConfig: {
-    text: '',
-    operation: 'trim',
-    search: '',
-    replacement: '',
-    separator: ',',
-    start: 0,
-    end: 100,
-    uppercase: false
-  }
-}
 
 export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
   const config = ctx.config

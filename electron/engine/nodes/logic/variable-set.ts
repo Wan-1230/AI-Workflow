@@ -1,25 +1,5 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeContext, NodeExecuteFn } from '@shared/node'
 
-export const definition: NodeDefinition = {
-  id: 'variable-set',
-  category: 'logic',
-  displayName: '变量设置',
-  description: '将任意值写入全局变量（后续节点通过 {{global.KEY}} 引用）',
-  icon: '🔧',
-  color: '#f59e0b',
-  inputs: [
-    { name: 'key', label: '变量名', type: 'string' },
-    { name: 'value', label: '变量值', type: 'any' }
-  ],
-  outputs: [
-    { name: 'key', label: '变量名', type: 'string' },
-    { name: 'value', label: '写入的值', type: 'any' }
-  ],
-  defaultConfig: {
-    key: 'myVar',
-    value: ''
-  }
-}
 
 /**
  * 变量设置节点

@@ -14,6 +14,25 @@ export interface LlmModelInfo {
   maxTokens?: number
 }
 
+/** 端口类型：含数组形态，与配置面板的变量提示保持一致 */
+export type NodePortType =
+  | 'string' | 'number' | 'boolean' | 'object' | 'any'
+  | 'string[]' | 'object[]' | 'any[]'
+
+/** 配置面板字段 schema（由渲染层消费，引擎忽略） */
+export interface NodeFieldSchema {
+  key: string
+  label: string
+  type: 'text' | 'textarea' | 'number' | 'select' | 'boolean' | 'json'
+  help?: string
+  placeholder?: string
+  rows?: number
+  /** 静态选项；与 dataSource 不同时使用 */
+  options?: { value: string; label: string }[]
+  /** 动态选项来源；取代此前 NodeConfig 内对 modelId 键名的隐式约定 */
+  dataSource?: 'models' | 'credentials'
+}
+
 export interface NodeDefinition {
   id: string
   category: NodeCategory
@@ -21,15 +40,22 @@ export interface NodeDefinition {
   description: string
   icon: string
   color: string
-  inputs: NodePort[]
   outputs: NodePort[]
   defaultConfig: Record<string, unknown>
+  fields: NodeFieldSchema[]
+  /**
+   * 多出口节点的 sourceHandle 标识（如条件分支的 true/false）。
+   * 未声明时视为单一匿名出口 —— 引擎按 `edge.sourceHandle || 'true'` 路由。
+   */
+  sourceHandles?: string[]
+  /** 该类型的执行时间上限建议；执行器据此放宽默认超时 */
+  executionLimits?: { timeoutMs?: number }
 }
 
 export interface NodePort {
   name: string
   label: string
-  type: 'string' | 'number' | 'boolean' | 'object' | 'any'
+  type: NodePortType
 }
 
 export interface NodeContext {

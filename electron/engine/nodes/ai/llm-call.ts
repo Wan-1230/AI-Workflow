@@ -1,36 +1,6 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn, LlmModelInfo } from '@shared/node'
+import type { NodeContext, NodeExecuteFn, LlmModelInfo } from '@shared/node'
 import { chatCompletion, normalizeBaseUrl } from '../../llm/client'
 
-export const definition: NodeDefinition = {
-  id: 'llm-call',
-  category: 'ai',
-  displayName: 'LLM 调用',
-  description: '调用大模型（OpenAI 兼容接口，支持流式输出）',
-  icon: '🤖',
-  color: '#8b5cf6',
-  inputs: [
-    { name: 'modelId', label: '模型配置', type: 'string' },
-    { name: 'systemPrompt', label: '系统提示词', type: 'string' },
-    { name: 'userPrompt', label: '用户提示词', type: 'string' }
-  ],
-  outputs: [
-    { name: 'text', label: '回复文本', type: 'string' },
-    { name: 'model', label: '模型名', type: 'string' },
-    { name: 'usage', label: 'Token 用量', type: 'object' },
-    { name: 'duration', label: '耗时(ms)', type: 'number' }
-  ],
-  defaultConfig: {
-    modelId: '',
-    baseUrl: '',
-    apiKeyRef: '',
-    model: '',
-    temperature: 0.7,
-    maxTokens: 2048,
-    systemPrompt: '你是一个有用的AI助手。',
-    userPrompt: '你好！',
-    stream: true
-  }
-}
 
 /** 从配置与注入的模型库信息中解析调用参数 */
 function resolveModel(
