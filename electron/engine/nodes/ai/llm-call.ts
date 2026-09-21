@@ -22,17 +22,19 @@ function resolveModel(
     return { baseUrl: fallback.baseUrl, apiKey: fallback.apiKey, model: fallback.model }
   }
 
-  // 2. 手动配置：baseUrl + apiKeyRef 或 credentials
-  const apiKey =
-    String(config.apiKeyRef || '') ||
-    ctx.secrets[String(config.apiKey || '')] ||
-    ''
+  // 2. 手动路径：credentialName 只作凭证表中的键名，绝不接受密钥明文。
+  //    曾直接把 config.apiKeyRef 当作 API Key 使用，使明文随 workflow_json 落库、
+  //    被导出到磁盘并回传渲染进程。
+  const credentialName = String(config.credentialName || '').trim()
+  const apiKey = credentialName ? (ctx.secrets[credentialName] ?? '') : ''
   const baseUrl = String(config.baseUrl || '')
   const model = String(config.model || '')
 
   if (!apiKey) {
     throw new Error(
-      '未找到可用的 API Key：请在「模型配置」页添加模型，或在节点中填写 apiKeyRef / baseUrl'
+      credentialName
+        ? `凭证 "${credentialName}" 不存在或无法解密：请在「设置 → 安全凭证」中确认，或改用「模型配置」页已登记的模型`
+        : '未找到可用的 API Key：请在「模型配置」页添加模型，或选择凭证并填写 baseUrl 与 model'
     )
   }
   if (!baseUrl) {

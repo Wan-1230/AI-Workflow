@@ -286,7 +286,10 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       userPrompt: '你好！',
       temperature: 0.7,
       maxTokens: 2048,
-      stream: true
+      stream: true,
+      credentialName: '',
+      baseUrl: '',
+      model: ''
     },
     fields: [
       { key: 'modelId', label: '模型配置', type: 'select', dataSource: 'models', help: '留空 = 使用默认模型（需先在「模型配置」页添加）' },
@@ -294,7 +297,10 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       { key: 'userPrompt', label: '用户提示词', type: 'textarea', rows: 5, help: '支持 {{nodeId.field}} / {{global.KEY}} 插值' },
       { key: 'temperature', label: '温度', type: 'number', help: '0~2，越高越随机' },
       { key: 'maxTokens', label: '最大 Token', type: 'number' },
-      { key: 'stream', label: '流式输出', type: 'boolean', help: '开启后在运行面板实时显示输出' }
+      { key: 'stream', label: '流式输出', type: 'boolean', help: '开启后在运行面板实时显示输出' },
+      { key: 'credentialName', label: '备用凭证', type: 'select', dataSource: 'credentials', help: '仅在未选择模型时使用；从「设置 → 安全凭证」中选取，不接收密钥明文' },
+      { key: 'baseUrl', label: '备用 Base URL', type: 'text', help: '与备用凭证搭配使用，如 https://api.openai.com/v1' },
+      { key: 'model', label: '备用模型名', type: 'text', help: '与备用凭证搭配使用，如 gpt-4o-mini' }
     ],
     executionLimits: { timeoutMs: 600000 },
     outputs: [

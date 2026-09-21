@@ -47,15 +47,18 @@ describe('节点目录契约', () => {
     }
   })
 
-  it('需要动态选项的字段必须显式声明 dataSource，不得靠键名隐式约定', () => {
+  it('select 字段必须显式给出选项来源：静态 options 或 dataSource', () => {
     for (const def of Object.values(nodeCatalog)) {
       for (const field of def.fields) {
         if (field.type !== 'select') continue
-        const dynamic = field.key === 'modelId'
-        if (dynamic) {
-          expect(field.dataSource, `${def.id}.${field.key} 应声明 dataSource`).toBe('models')
-        } else {
-          expect(field.options, `${def.id}.${field.key} 静态 select 必须有 options`).toBeTruthy()
+        const hasSource = Boolean(field.options?.length) || Boolean(field.dataSource)
+        expect(hasSource, `${def.id}.${field.key} 既无 options 也无 dataSource`).toBe(true)
+        if (field.dataSource) {
+          expect(['models', 'credentials']).toContain(field.dataSource)
+          expect(field.options, `${def.id}.${field.key} 动态来源不应同时携带静态选项`).toBeUndefined()
+        }
+        if (field.key === 'modelId') {
+          expect(field.dataSource, `${def.id}.modelId 应声明 dataSource=models`).toBe('models')
         }
       }
     }

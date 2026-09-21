@@ -9,6 +9,9 @@ import { ModelStore } from '../../electron/engine/storage/models'
 import { PromptStore } from '../../electron/engine/storage/prompts'
 import { SettingsStore } from '../../electron/engine/storage/settings'
 import { workflowTemplates } from '../../electron/engine/templates'
+import { runMigrations, MigrationError, type MigrationReport } from './db/index'
+import { migrations } from './db/migrations'
+import { findSecretPaths, redactSecrets, scanWorkflowSecrets } from '../../electron/engine/secrets-guard'
 import type { WorkflowDefinition, ExecutionEvent } from '@shared/workflow'
 import type { LlmModelInfo } from '@shared/node'
 import type { CreateProjectInput } from '@shared/project'
@@ -18,6 +21,17 @@ import type { AppSettingsInput } from '@shared/settings'
 
 let mainWindow: BrowserWindow | null = null
 const engine = new WorkflowEngine()
+
+/** 明文密钥的统一定位文案，供各写入口复用 */
+function plaintextSecretError(
+  findings: Array<{ nodeId: string; field: string; innerKey?: string }>
+): string {
+  const where = findings
+    .map(f => `${f.nodeId}.${f.field}${f.innerKey ? `.${f.innerKey}` : ''}`)
+    .join('、')
+  return `工作流中存在明文密钥（位置：${where}）。请改为选择「模型配置」里的模型，`
+    + `或在「设置 → 安全凭证」登记后引用凭证名 —— 密钥一旦写入项目文件，即视为泄露。`
+}
 let executionStorage: ExecutionStorage | null = null
 let credentialManager: CredentialManager | null = null
 let projectStore: ProjectStore | null = null
@@ -137,6 +151,12 @@ function setupIPC() {
         console.warn(`工作流校验告警: ${formatValidationIssues(validation.warnings)}`)
       }
 
+      // 明文密钥不拒绝执行的话，用户会以为这套流程是"安全"的
+      const leaked = scanWorkflowSecrets(wf)
+      if (leaked.length) {
+        return { success: false, error: plaintextSecretError(leaked) }
+      }
+
       currentExecutionId = `exec_${Date.now()}`
       const runStartedAt = Date.now()
       let runFinishedAt = 0
@@ -215,7 +235,8 @@ function setupIPC() {
 
     const dir = path.dirname(filePath)
     await fs.mkdir(dir, { recursive: true })
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+    // 导出是密钥离开应用的单向通道：命中明文即在落盘前替换为占位符
+    await fs.writeFile(filePath, JSON.stringify(redactSecrets(data), null, 2), 'utf-8')
     return { success: true }
   })
 
@@ -263,7 +284,14 @@ function setupIPC() {
     }
 
     const fs = await import('fs/promises')
-    await fs.writeFile(result.filePath, content, 'utf-8')
+    // 导出内容与 workflow:save 同等对待：能按 JSON 解析就先脱敏再落盘
+    let payload = content
+    try {
+      payload = JSON.stringify(redactSecrets(JSON.parse(content) as unknown), null, 2)
+    } catch {
+      /* 非 JSON 内容（如纯文本导出）原样写出 */
+    }
+    await fs.writeFile(result.filePath, payload, 'utf-8')
     return { success: true, path: result.filePath }
   })
 
@@ -415,6 +443,11 @@ function setupIPC() {
 
   // 保存工作流内容
   ipcMain.handle('projects:saveWorkflow', (_event, id: string, workflow: WorkflowDefinition) => {
+    // 写入前拦截明文密钥：它会随 workflow_json 落库并被导出，属于持久化泄露
+    const leaked = scanWorkflowSecrets(workflow)
+    if (leaked.length) {
+      return { success: false, error: plaintextSecretError(leaked) }
+    }
     try {
       const ok = projectStore?.saveWorkflow(id, workflow) || false
       return { success: ok, error: ok ? undefined : '项目不存在' }
@@ -578,41 +611,75 @@ function setupIPC() {
 
 // ===== 应用生命周期 =====
 
-app.whenReady().then(() => {
-  // 初始化执行历史存储
+/**
+ * 启动期致命错误：中止启动，而不是带着读不开的库继续运行。
+ *
+ * 原先各 Store 构造失败只 console.error，随后各处 `store?.x() || []` 静默返回空，
+ * 于是「数据库损坏」在界面上表现为「你一个项目都没有」——用户极可能就此重建并覆盖数据。
+ */
+function abortStartup(title: string, detail: unknown, backupHint?: string): never {
+  const message = detail instanceof Error ? detail.message : String(detail)
+  console.error(`${title}:`, detail)
   try {
-    executionStorage = new ExecutionStorage()
-  } catch (err) {
-    console.error('初始化执行历史存储失败:', err)
-  }
+    dialog.showMessageBoxSync({
+      type: 'error',
+      title,
+      message: title,
+      detail: backupHint ? `${message}\n\n${backupHint}` : message,
+      buttons: ['退出']
+    })
+  } catch { /* 无图形界面时至少留下日志 */ }
+  app.quit()
+  throw detail
+}
 
-  // 初始化凭证管理器
+app.whenReady().then(() => {
+  // 凭证管理器最先建立：迁移需要把明文密钥升格为加密凭证
   try {
     credentialManager = new CredentialManager()
   } catch (err) {
-    console.error('初始化凭证管理器失败:', err)
+    return abortStartup('无法打开凭证存储', err)
   }
 
-  // 初始化项目库 / 模型库 / 提示词库 / 设置
+  // 数据迁移必须早于各 Store 打开
+  let migrationReport: MigrationReport | null = null
   try {
-    projectStore = new ProjectStore()
+    const { report, close } = runMigrations(migrations, {
+      setCredential: (name, value, displayName) => {
+        try {
+          credentialManager?.set(name, value, displayName)
+          return true
+        } catch {
+          return false
+        }
+      },
+      credentialExists: name => (credentialManager?.list() ?? []).some(c => c.key === name),
+      log: msg => console.log(`[migration] ${msg}`)
+    })
+    migrationReport = report
+    close()
   } catch (err) {
-    console.error('初始化项目库失败:', err)
+    return abortStartup(
+      '数据迁移失败，已阻止启动以保护现有数据',
+      err,
+      err instanceof MigrationError ? err.backupHint : undefined
+    )
   }
-  try {
-    modelStore = new ModelStore()
-  } catch (err) {
-    console.error('初始化模型库失败:', err)
-  }
-  try {
-    promptStore = new PromptStore()
-  } catch (err) {
-    console.error('初始化提示词库失败:', err)
-  }
-  try {
-    settingsStore = new SettingsStore()
-  } catch (err) {
-    console.error('初始化设置存储失败:', err)
+
+  // 各存储：任一打开失败都必须中止启动，不得静默降级为空库
+  const inits: Array<[string, () => void]> = [
+    ['执行历史存储', () => { executionStorage = new ExecutionStorage() }],
+    ['项目库', () => { projectStore = new ProjectStore() }],
+    ['模型库', () => { modelStore = new ModelStore() }],
+    ['提示词库', () => { promptStore = new PromptStore() }],
+    ['设置存储', () => { settingsStore = new SettingsStore() }]
+  ]
+  for (const [label, init] of inits) {
+    try {
+      init()
+    } catch (err) {
+      return abortStartup(`初始化${label}失败`, err)
+    }
   }
 
   // 应用与超时相关的全局设置：设置项此前只落库不被读取，故在此接线
@@ -627,6 +694,21 @@ app.whenReady().then(() => {
   setupIPC()
   setupMenu()
   createWindow()
+
+  // 迁移改写过数据就必须告知，否则用户只会看到"密钥不见了"而无从理解
+  if (migrationReport && migrationReport.applied.some(a => a.affected > 0)) {
+    const lines = migrationReport.applied
+      .filter(a => a.affected > 0)
+      .map(a => `· ${a.name}：影响 ${a.affected} 项${a.backupDir ? `（备份：${a.backupDir}）` : ''}`)
+    try {
+      dialog.showMessageBoxSync({
+        type: 'info',
+        title: '数据已完成升级',
+        message: `本次启动应用了 ${migrationReport.applied.length} 项数据迁移`,
+        detail: `${lines.join('\n')}\n\n若迁移把项目中的明文密钥转成了加密凭证，你仍可在「设置 → 安全凭证」中查看与删除它们。`
+      })
+    } catch { /* 无图形界面时忽略 */ }
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

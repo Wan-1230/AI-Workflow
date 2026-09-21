@@ -8,7 +8,7 @@ import type { ModelConfig } from '@shared/model'
 /**
  * 节点配置面板（schema 驱动）
  * - 依据 @shared/node-catalog 的 fields 定义渲染表单
- * - modelId 字段动态加载模型库选项
+ * - 字段的动态选项由 field.dataSource 声明（模型库 / 凭证库），不靠键名隐式约定
  * - 提供上游输出引用（变量）快速插入
  */
 export function NodeConfig() {
@@ -17,12 +17,16 @@ export function NodeConfig() {
   const def = selectedNode ? nodeCatalog[selectedNode.data.nodeType as string] : null
 
   const [models, setModels] = useState<ModelConfig[] | null>(null)
+  const [credentialNames, setCredentialNames] = useState<string[] | null>(null)
 
-  // 动态加载模型列表（供 modelId 下拉使用）
+  // 动态加载模型与凭证列表（供 dataSource 字段下拉使用）
   useEffect(() => {
     let cancelled = false
     window.api.listModels().then(res => {
       if (!cancelled && res.success && res.data) setModels(res.data)
+    }).catch(() => {})
+    window.api.getCredentials().then(res => {
+      if (!cancelled && res.success && res.data) setCredentialNames(res.data.map(c => c.key))
     }).catch(() => {})
     return () => { cancelled = true }
   }, [])
@@ -90,6 +94,7 @@ export function NodeConfig() {
                 field={field}
                 value={config[field.key] !== undefined ? config[field.key] : def.defaultConfig[field.key]}
                 models={models}
+                credentialNames={credentialNames}
                 onChange={v => updCfg(field.key, v)}
               />
             ))}
@@ -127,31 +132,38 @@ function SchemaField({
   field,
   value,
   models,
+  credentialNames,
   onChange,
 }: {
   field: NodeFieldSchema
   value: unknown
   models: ModelConfig[] | null
+  credentialNames: string[] | null
   onChange: (v: unknown) => void
 }) {
   // 动态选项字段：由 catalog 的 dataSource 声明，不再依赖字段键名的隐式约定
-  if (field.dataSource === 'models') {
+  if (field.dataSource === 'models' || field.dataSource === 'credentials') {
+    const isModels = field.dataSource === 'models'
+    const loading = isModels ? models === null : credentialNames === null
+    const options = isModels
+      ? [
+          { value: '', label: '默认模型（在「模型」页配置）' },
+          ...(models ?? []).map(m => ({ value: m.id, label: `${m.name}${m.isDefault ? '（默认）' : ''} · ${m.model}` }))
+        ]
+      : [
+          { value: '', label: '不使用凭证（改用「模型配置」中的模型）' },
+          ...(credentialNames ?? []).map(name => ({ value: name, label: name }))
+        ]
+
     return (
       <div>
         <label className="text-xs font-medium text-fg-secondary mb-1 block">
           {field.label} {field.help && <span className="text-2xs text-fg-muted font-normal">({field.help})</span>}
         </label>
-        {models === null ? (
-          <div className="py-1.5"><Spinner size={12} label="加载模型..." /></div>
+        {loading ? (
+          <div className="py-1.5"><Spinner size={12} label={isModels ? '加载模型...' : '加载凭证...'} /></div>
         ) : (
-          <Select
-            value={String(value || '')}
-            onChange={e => onChange(e.target.value)}
-            options={[
-              { value: '', label: '默认模型（在「模型」页配置）' },
-              ...models.map(m => ({ value: m.id, label: `${m.name}${m.isDefault ? '（默认）' : ''} · ${m.model}` }))
-            ]}
-          />
+          <Select value={String(value || '')} onChange={e => onChange(e.target.value)} options={options} />
         )}
       </div>
     )
