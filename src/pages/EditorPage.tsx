@@ -16,7 +16,6 @@ import { toast } from '../stores/toast-store'
 export function EditorPage() {
   const currentProject = useAppStore(s => s.currentProject)
   const setView = useAppStore(s => s.setView)
-  const saveToProject = useWorkflowStore(s => s.saveToProject)
 
   // 未打开项目时回到首页
   useEffect(() => {

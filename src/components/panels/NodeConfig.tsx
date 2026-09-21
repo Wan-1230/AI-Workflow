@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Trash2, Settings2, Variable, X } from 'lucide-react'
+import { Trash2, Settings2, Variable } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { nodeDefinitions, type UIFieldSchema } from '../../stores/node-definitions'
-import { Input, Textarea, Select, Switch, Button, IconButton, Spinner } from '../../components/ui'
+import { Input, Textarea, Select, Switch, IconButton, Spinner } from '../../components/ui'
 import type { ModelConfig } from '@shared/model'
 
 /**

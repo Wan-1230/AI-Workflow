@@ -22,7 +22,6 @@ export function ModelsPage() {
   // 编辑弹窗状态
   const [editing, setEditing] = useState<ModelConfig | null>(null)
   const [formOpen, setFormOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<ModelConfig | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   // 测试中模型 id
@@ -181,7 +180,6 @@ export function ModelsPage() {
       <ModelFormModal
         open={formOpen}
         editing={editing}
-        saving={saving}
         onClose={() => setFormOpen(false)}
         onSaved={async () => { setFormOpen(false); await load() }}
       />
@@ -204,10 +202,9 @@ export function ModelsPage() {
 /* =====================================================================
    模型表单弹窗（新建 / 编辑）
    ===================================================================== */
-function ModelFormModal({ open, editing, saving, onClose, onSaved }: {
+function ModelFormModal({ open, editing, onClose, onSaved }: {
   open: boolean
   editing: ModelConfig | null
-  saving: boolean
   onClose: () => void
   onSaved: () => void
 }) {
@@ -306,7 +303,7 @@ function ModelFormModal({ open, editing, saving, onClose, onSaved }: {
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>取消</Button>
-          <Button variant="primary" loading={submitLoading || saving} onClick={handleSubmit}>保存</Button>
+          <Button variant="primary" loading={submitLoading} onClick={handleSubmit}>保存</Button>
         </>
       }
     >

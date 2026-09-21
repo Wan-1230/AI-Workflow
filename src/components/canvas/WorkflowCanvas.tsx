@@ -4,7 +4,6 @@ import {
   Background,
   Controls,
   MiniMap,
-  type XYPosition,
   BackgroundVariant,
   useReactFlow,
 } from '@xyflow/react'
@@ -12,7 +11,6 @@ import '@xyflow/react/dist/style.css'
 import { BaseNode } from './nodes/BaseNode'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { nodeDefinitions } from '../../stores/node-definitions'
-import { toast } from '../../stores/toast-store'
 
 const nodeTypes = { baseNode: BaseNode }
 

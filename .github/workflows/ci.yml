@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    # 仅 Windows：better-sqlite3 原生模块与 electron-builder 打包链路都只在 Windows 验证，
+    # 跨平台矩阵会产出无法发布也无人验证的绿灯。见 spec §4.2 已知限制。
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: Lint（禁止 --fix，仅校验）
+        # 暂不设 --max-warnings=0：剩余告警集中在存储层 `as any` 行转换，
+        # 该批文件在 S0 的密钥改造步骤会被重写，届时于验收阶段收紧为 0。
+        run: pnpm lint:check
+
+      - name: 测试
+        run: pnpm test
+
+      - name: 构建
+        run: pnpm build
+
+      # 防止 electron-vite 静默回落到约定入口的旧副本（历史上曾因此丢失整批主进程功能）
+      - name: 校验产物入口正确性
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "window:toggleMaximize" out/main/index.js \
+            || { echo "::error::out/main/index.js 缺少 window:toggleMaximize —— 主进程入口指向了陈旧副本"; exit 1; }
+          grep -q "projects:create" out/main/index.js \
+            || { echo "::error::out/main/index.js 缺少 projects:create —— 项目库未被打进产物"; exit 1; }
+          ! grep -q "hiddenInset" out/main/index.js \
+            || { echo "::error::out/main/index.js 仍含 hiddenInset —— 打包进了 MVP 期旧主进程"; exit 1; }
+          grep -q "windowControls" out/preload/index.mjs \
+            || { echo "::error::out/preload/index.mjs 缺少 windowControls —— 预加载入口错位"; exit 1; }
+          echo "产物入口标记校验通过"

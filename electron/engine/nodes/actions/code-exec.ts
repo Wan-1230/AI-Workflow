@@ -43,7 +43,7 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
           maxYoungGenerationSizeMb: 32,
         }
       })
-    } catch (err: unknown) {
+    } catch {
       // 如果 worker 文件不存在（开发模式），回退到 vm 执行
       return executeFallback(code, input, ctx).then(resolve, reject)
     }

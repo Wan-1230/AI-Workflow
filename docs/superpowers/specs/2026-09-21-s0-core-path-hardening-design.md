@@ -7,24 +7,17 @@
 
 ## 1. 问题陈述
 
-这个软件当前**无法执行任何 AI 工作流**。不是体验问题，是主链路断裂。
+缺陷分两层，实现阶段（S0 §4 脚手架）的实测把此前只存在于源码中的问题与真正影响发布版的问题区分开了。
 
-`electron/engine/validator.ts:6-8` 的白名单只登记了 5 种节点类型：
+**第一层 —— 发布的产物跑的不是这份代码（E13–E16，最高优先级）**
 
-```
-'manual-trigger', 'http-request', 'code-exec', 'condition', 'notification'
-```
+electron-vite 按约定加载 `src/main/index.ts`，而真实主进程实现一直在 `electron/main.ts`。旧副本停留在 MVP 初始提交且从不更新，构建静默采用它、不报错。后果：已交付的安装包与便携版中，项目库、模型库、提示词库、执行历史、凭证加密**全部不存在**，自绘标题栏的窗口控制 IPC 也从未进入产物；渲染层照常调用这些 API，因此相关页面拿不到任何数据。叠加 `vite.config.ts` 文件名错误（E14）导致 `externalizeDepsPlugin` 空转，一旦入口修正，`better-sqlite3` 内联又会让六个 Store 集体初始化失败（E15）。这四项均已在 S0 §4 期间定位并修复。
 
-而 `electron/engine/nodes/index.ts` 注册了 16 种（已逐行核对，16 个 `nodeRegistry.set`）。`electron/main.ts:133-136` 对校验失败直接硬拒绝：
+**第二层 —— 源码本身的主链路断裂（E1–E10）**
 
-```ts
-const validation = validateWorkflow(wf)
-if (!validation.valid) {
-  return { success: false, error: `工作流校验失败: ${validation.errors.join('; ')}` }
-}
-```
+修好入口后，`electron/engine/validator.ts:6-8` 的白名单开始真正生效：它只登记 5 种类型，而 `nodes/index.ts` 注册了 16 种，`main.ts:133-136` 对校验失败硬拒绝执行。因此任何含 `llm-call` / `prompt-template` / `loop` / `rag-*` / `tool-call` / `agent-delegate` 的工作流，点击「运行」只会返回「节点类型无效」，README 宣传的内置模板全部不可运行。
 
-因此任何含 `llm-call` / `prompt-template` / `loop` / `rag-*` / `tool-call` / `agent-delegate` 等工作流，点击「运行」只会返回「节点类型无效」。README 宣传的四个内置模板（LLM 对话 / RAG 问答 / 文本流水线）全部不可运行。
+> 说明：在第一层存在期间，旧产物因为不含校验逻辑反而"能跑节点"——但这不构成任何可用性，因为它没有数据层。两层都必须解决。
 
 ### 已核实的缺陷清单
 
@@ -41,13 +34,18 @@ if (!validation.valid) {
 | E8 | 执行历史每条耗时均为伪造值 | `main.ts:173` `startedAt: Date.now() - 1, // 近似值`；`engine/index.ts:212-218` 错误结果 `duration: 0` 硬编码 |
 | E9 | 历史保留策略死代码，设置项无效果 | `storage/index.ts:158` 定义 `pruneHistory()`，全仓 grep 仅此一处命中（无调用点）；`main.ts:167` 未检查 `saveHistory` 设置 |
 | E10 | 渲染层小缺陷 | `theme-store.ts:52` `matchMedia` 监听器未移除；`HomePage.tsx:341` `disabled={!name.trim() && loading}` 逻辑取反，永不禁用 |
-| E11 | 死代码：旧版主进程/预加载/入口副本 | `src/main/index.ts`(255) `src/preload/index.ts`(51) `src/renderer/*` `src/hooks/`(空)；真实入口为 `electron/main.ts`、`electron/preload.ts`、根 `index.html`→`/src/main.tsx`（已核对 `vite.config.ts` 与 `index.html:20`） |
+| E11 | ~~死代码~~ **判定有误，已由 E13 取代**：`src/main/index.ts`、`src/preload/index.ts`、`src/renderer/*` 并非死代码，而是 electron-vite 约定式入口的**生效位置** | 实现阶段实测：删除后构建直接报「An entry point is required」 |
+| E13 | **构建入口错位（本程序最高优先级缺陷）**：真实主进程实现放在 `electron/main.ts`，而 electron-vite 按约定加载 `src/main/index.ts`（停留在 MVP 初始提交 `5fbb394`，从未更新）。构建静默采用旧副本，无任何报错 | 上次发布产物 `out/main/index.js` 中 `window:toggleMaximize`/`app:resetZoom`/`validateWorkflow`/`projects:create`/`safeStorage` 均出现 **0** 次，`hiddenInset`（旧标题栏配置）出现 1 次；`out/preload/index.mjs` 中 `windowControls` 出现 0 次 |
+| E14 | 配置文件名错误：仓库只有 `vite.config.ts`，而 electron-vite 读取 `electron.vite.config.*`。该文件长期是空转配置 | 改名后 `externalizeDepsPlugin` 才生效，main 产物 147.66 kB → 116.85 kB |
+| E15 | `better-sqlite3` 被 rollup 内联，`bindings` 的动态 require 在 ESM bundle 中失效 → 项目库/模型库/提示词库/设置/执行历史/凭证 **六个 Store 全部初始化失败**，且被 catch 后静默继续运行 | 启用 externalize 后「初始化…失败」日志由 6 条降为 0 条 |
+| E16 | `electron/main.ts` 的 preload 路径写错：`join(__dirname, 'preload.js')` → 实际产物为 `out/preload/index.mjs` | 该文件此前从未进入产物，故问题一直未暴露 |
 | E12 | 工程化基线为零 | 无任何 `*.test.*`/`*.spec.*`，`package.json` 无 `test` 脚本，无 `.github/`，`pnpm lint` 以 29 error / 39 warning 退出码 1 |
 
 ## 2. 目标与非目标
 
 ### 目标
 
+G0 **构建产物与源码一致**：入口与配置文件名修正，原生模块正确外部化，Store 全部初始化成功，并在 CI 中加入产物标记断言，使同类静默回退无法通过流水线。
 G1 全部 16 类节点可端到端执行，并由测试证明。
 G2 API Key 不再以明文形态进入 `workflow_json`、磁盘导出文件或渲染进程；存量数据被清洗。
 G3 节点元数据单一事实来源，使 E1/E2 类缺陷在结构上不可能复发。
@@ -56,7 +54,7 @@ G5 测试骨架 + CI 绿灯基线，使后续每个 spec 的改动可证明。
 
 ### 非目标（明确排除，后续 spec 处理）
 
-- 循环的真实逐项执行语义、子工作流上下文隔离 → **S2**
+- 循环的真实逐项执行语义、子工作流上下文隔离 → **S2**。S2 需一并处理的已知缺口：`engine/index.ts:230-239` 的 `executeSubWorkflow` 接收 `stream` 回调但从未使用，因此**子工作流内的 LLM 节点不产出流式输出**（S0 仅将其改名为 `_stream` 以标注"已知未接线"，不做修复）。
 - 真 embedding 模型、向量持久化与重启重建 → **S3**
 - 超时中止贯穿底层任务、per-node 错误分支、`executionId` 并发隔离、事件驱动调度、类型化变量解析 → **S1**（本 spec 仅做 E5 的最小兜底，见 §3.6）
 - 6 库合一、外键/事务全面化、前端 Zustand 窄选择器、日志虚拟化 → **S4**
@@ -250,8 +248,15 @@ export interface Migration {
    - catalog 每个 `outputs[].name` 均出现在 `execute()` 返回对象键中（用 mock ctx 实际调用）；
    - catalog 无 `looksLikeSecret` 命中的默认值。
 2. **单元**：`validator`（含 E1 的 16 类全部放行、引用不可达被拒、端口校验）、`secrets-guard`（探测器召回率与误报边界）、`executor` 变量解析既有行为不回归。
-3. **集成**：16 个节点各 1 条端到端，`fetch`/`child_process`/`electron` 以 mock 替身注入，SQLite 走系统临时目录。断言 `node:complete` 事件顺序与最终 `NodeResult.status`。
+3. **集成**：16 个节点各 1 条端到端，`fetch`/`child_process` 以 mock 替身注入。断言 `node:complete` 事件顺序与最终 `NodeResult.status`。
    - 另加「LLM 对话」与「文本流水线」两个内置模板的完整跑通测试——模板是用户的第一次真实体验，必须绿。
+
+**原生模块约束（实现阶段发现，已据此修正方案）**：`better-sqlite3` 本地按 Electron ABI 构建，纯 Node/vitest 下 `require` 直接抛 `NODE_MODULE_VERSION` 不匹配（已实测）。同一依赖无法同时满足 Electron 运行与 Node 测试，除非引入双份构建。因此：
+
+- 原计划「SQLite 走系统临时目录」的集成测试**不成立**，取消；
+- 测试策略改为**把风险逻辑下沉为纯函数**：例如迁移 #1 的密钥清洗主体写成 `purgeKeysInJson(json) → { json, findings }`，可脱离数据库完整测试；DB 读写保持薄壳，靠 §6 的人工验收覆盖；
+- 需要真实 SQLite 的存储层测试推迟到 **S4**（届时 6 库合一，顺带引入可注入的驱动接口使其可测）；
+- vitest 配置以 `tests/stubs/better-sqlite3.ts` 显式拦截该模块——桩被触发即抛错，避免依赖真库的测试静默通过。
 
 ### 4.2 CI
 

@@ -1,4 +1,4 @@
-import type { WorkflowNode, ExecutionContext, NodeResult, RetryConfig } from '@shared/workflow'
+import type { WorkflowNode, ExecutionContext, RetryConfig } from '@shared/workflow'
 import type { NodeExecuteFn } from '@shared/node'
 import { nodeRegistry } from '../nodes'
 

@@ -21,14 +21,13 @@ const catLabels: Record<string, string> = {
   rag: 'RAG'
 }
 
-function BaseNodeComponent({ id, data, selected, positionAbsoluteX, positionAbsoluteY }: NodeProps) {
+function BaseNodeComponent({ id, data, selected }: NodeProps) {
   const { selectNode, execution, removeNode, duplicateNode } = useWorkflowStore()
   const nd = data as unknown as BaseNodeData
   const status: ExecutionStatus = execution.nodeStatuses[id] || 'idle'
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const isCondition = nd.nodeType === 'condition'
-  const isLoop = nd.nodeType === 'loop'
 
   useEffect(() => {
     if (!menu) return

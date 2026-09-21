@@ -1,5 +1,3 @@
-import type { WorkflowDefinition } from '@shared/workflow'
-
 const MAX_NODES = 100
 const MAX_EDGES = 200
 const MAX_CONFIG_DEPTH = 5

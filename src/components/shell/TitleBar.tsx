@@ -37,10 +37,9 @@ export function TitleBar() {
 
   // 初始化窗口状态 + 监听最大化变化
   useEffect(() => {
-    let unsub: (() => void) | undefined
     window.api.windowControls.isMaximized().then(setMaximized).catch(() => undefined)
-    unsub = window.api.windowControls.onMaximizedChange(setMaximized)
-    return () => unsub?.()
+    const unsub = window.api.windowControls.onMaximizedChange(setMaximized)
+    return () => unsub()
   }, [])
 
   // 点击外部关闭菜单

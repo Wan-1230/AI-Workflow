@@ -1,5 +1,4 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
-import { Readable } from 'stream'
 
 /* =====================================================================
    轻量 MCP (Model Context Protocol) 客户端

@@ -83,7 +83,6 @@ const BUILTIN_TOOLS: Record<string, { description: string; run: (args: Record<st
       if (!/^[\d\s+\-*/%().]+$/.test(expr)) {
         throw new Error('表达式包含非法字符，仅支持数字与 + - * / % ( )')
       }
-      // eslint-disable-next-line no-new-func
       const value = Function(`"use strict"; return (${expr})`)()
       return { value, expression: expr }
     }

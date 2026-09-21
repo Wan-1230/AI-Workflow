@@ -235,7 +235,7 @@ export class WorkflowEngine {
     secrets: Record<string, string>,
     models?: LlmModelInfo[],
     variables?: Record<string, string>,
-    stream?: (chunk: StreamChunk) => void
+    _stream?: (chunk: StreamChunk) => void
   ): Promise<Record<string, unknown>> {
     const signal = abortController.signal
     const rawJson = String(node.config.workflowJson || '').trim()

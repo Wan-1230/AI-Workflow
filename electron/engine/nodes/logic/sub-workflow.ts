@@ -1,4 +1,4 @@
-import type { NodeDefinition, NodeContext, NodeExecuteFn } from '@shared/node'
+import type { NodeDefinition, NodeExecuteFn } from '@shared/node'
 
 export const definition: NodeDefinition = {
   id: 'sub-workflow',
