@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Trash2, Settings2, Variable } from 'lucide-react'
+import { Trash2, Settings2, Variable, ChevronDown, ChevronRight } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { nodeCatalog, type NodeFieldSchema } from '@shared/node-catalog'
+import type { NodeErrorStrategy, NodeExecutionConfig } from '@shared/workflow'
 import { Input, Textarea, Select, Switch, IconButton, Spinner } from '../../components/ui'
 import type { ModelConfig } from '@shared/model'
 
@@ -12,7 +13,10 @@ import type { ModelConfig } from '@shared/model'
  * - 提供上游输出引用（变量）快速插入
  */
 export function NodeConfig() {
-  const { nodes, selectedNodeId, updateNodeData, updateNodeConfig, removeNode } = useWorkflowStore()
+  const {
+    nodes, selectedNodeId, updateNodeData, updateNodeConfig,
+    updateNodeExecutionConfig, removeNode
+  } = useWorkflowStore()
   const selectedNode = nodes.find(n => n.id === selectedNodeId)
   const def = selectedNode ? nodeCatalog[selectedNode.data.nodeType as string] : null
 
@@ -100,6 +104,12 @@ export function NodeConfig() {
             ))}
           </div>
         )}
+
+        {/* 执行策略：超时 / 重试 / 失败处置 */}
+        <ExecutionPolicy
+          value={(selectedNode.data.executionConfig as NodeExecutionConfig | undefined) ?? {}}
+          onChange={v => selectedNodeId && updateNodeExecutionConfig(selectedNodeId, v)}
+        />
 
         {/* 变量引用提示 */}
         {def.fields.length > 0 && (
@@ -300,6 +310,109 @@ function VariableReferences({ nodeId, onPick }: { nodeId: string; onPick: (expr:
               </div>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* =====================================================================
+   执行策略：超时 / 重试 / 失败处置
+   这些配置对所有节点同构，因此不走 catalog 的 fields schema
+   ===================================================================== */
+
+const STRATEGY_LABELS: Record<NodeErrorStrategy, string> = {
+  stop: '中断工作流',
+  skip: '跳过并继续',
+  'retry-then-skip': '重试后跳过',
+  'error-branch': '走错误分支'
+}
+
+function buildRetry(maxRetries?: number, interval?: number): NodeExecutionConfig['retry'] {
+  if (maxRetries === undefined && interval === undefined) return undefined
+  return { maxRetries: maxRetries ?? 0, interval: interval ?? 1000 }
+}
+
+function ExecutionPolicy({ value, onChange }: {
+  value: NodeExecutionConfig
+  onChange: (v: NodeExecutionConfig) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const strategy = value.onError ?? 'stop'
+  const patched = (p: Partial<NodeExecutionConfig>) => onChange({ ...value, ...p })
+
+  return (
+    <div className="border-t border-line pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between text-xs font-medium text-fg-secondary hover:text-fg transition-colors"
+      >
+        <span>执行策略</span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-2xs text-fg-muted">{STRATEGY_LABELS[strategy]}</span>
+          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          <Input
+            label="超时 (ms)"
+            type="number"
+            min="1000"
+            placeholder="留空使用全局设置"
+            value={value.timeout !== undefined ? String(value.timeout) : ''}
+            onChange={e => {
+              const n = Number(e.target.value)
+              patched({ timeout: Number.isFinite(n) && n > 0 ? n : undefined })
+            }}
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              label="重试次数"
+              type="number"
+              min="0"
+              placeholder="0"
+              value={value.retry ? String(value.retry.maxRetries) : ''}
+              onChange={e => {
+                const n = Number(e.target.value)
+                patched({ retry: buildRetry(Number.isFinite(n) && n >= 0 ? n : undefined, value.retry?.interval) })
+              }}
+            />
+            <Input
+              label="重试间隔 (ms)"
+              type="number"
+              min="0"
+              placeholder="1000"
+              value={value.retry ? String(value.retry.interval) : ''}
+              onChange={e => {
+                const n = Number(e.target.value)
+                patched({ retry: buildRetry(value.retry?.maxRetries, Number.isFinite(n) && n >= 0 ? n : undefined) })
+              }}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-fg-secondary mb-1 block">失败处置</label>
+            <Select
+              value={strategy}
+              onChange={e => patched({ onError: e.target.value as NodeErrorStrategy })}
+              options={(Object.keys(STRATEGY_LABELS) as NodeErrorStrategy[])
+                .map(k => ({ value: k, label: STRATEGY_LABELS[k] }))}
+            />
+          </div>
+
+          {strategy === 'error-branch' && (
+            <Input
+              label="错误出口句柄"
+              placeholder="error"
+              help="连线时需从该出口拉出到错误处理节点"
+              value={value.errorHandle ?? ''}
+              onChange={e => patched({ errorHandle: e.target.value.trim() || undefined })}
+            />
+          )}
         </div>
       )}
     </div>

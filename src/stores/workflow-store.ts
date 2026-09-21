@@ -14,7 +14,7 @@ import { v4 as uuid } from 'uuid'
 import { nodeCatalog } from '@shared/node-catalog'
 import { useAppStore } from './app-store'
 import { toast } from './toast-store'
-import type { GlobalVariable, WorkflowDefinition } from '@shared/workflow'
+import type { GlobalVariable, NodeExecutionConfig, WorkflowDefinition } from '@shared/workflow'
 
 export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled' | 'skipped'
 export type ExecutionPhase = 'idle' | 'running' | 'completed' | 'error' | 'cancelled'
@@ -89,6 +89,7 @@ interface WorkflowStore {
   addNode: (type: string, position: XYPosition) => Node | null
   updateNodeData: (nodeId: string, data: Record<string, unknown>) => void
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
+  updateNodeExecutionConfig: (nodeId: string, executionConfig: NodeExecutionConfig | undefined) => void
   removeNode: (nodeId: string) => void
   removeNodes: (nodeIds: string[]) => void
   selectNode: (nodeId: string | null) => void
@@ -207,6 +208,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   updateNodeConfig: (nodeId, config) => {
     get().updateNodeData(nodeId, { config })
+  },
+
+  updateNodeExecutionConfig: (nodeId, executionConfig) => {
+    // 传空对象表示回落默认（stop + 全局超时），不保留空壳字段
+    const cleaned = executionConfig && Object.keys(executionConfig).length > 0 ? executionConfig : undefined
+    get().updateNodeData(nodeId, { executionConfig: cleaned })
   },
 
   removeNode: nodeId => {
@@ -394,9 +401,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           label: n.label || def?.displayName || n.type,
           nodeType: n.type,
           category: def?.category || 'action',
-          color: def?.color || '#4cc38a',
+          color: def?.color || '#86909C',
           icon: def?.icon || '📦',
-          config: { ...(def?.defaultConfig || {}), ...(n.config || {}) }
+          config: { ...(def?.defaultConfig || {}), ...(n.config || {}) },
+          executionConfig: n.executionConfig
         }
       }
     })
@@ -603,7 +611,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         type: String(node.data.nodeType),
         label: String(node.data.label || ''),
         position: node.position,
-        config: (node.data.config as Record<string, unknown>) || {}
+        config: (node.data.config as Record<string, unknown>) || {},
+        executionConfig: node.data.executionConfig as NodeExecutionConfig | undefined
       })),
       edges: state.edges.map(edge => ({
         id: edge.id,
