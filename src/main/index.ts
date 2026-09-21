@@ -41,7 +41,13 @@ let projectStore: ProjectStore | null = null
 let modelStore: ModelStore | null = null
 let promptStore: PromptStore | null = null
 let settingsStore: SettingsStore | null = null
-let currentExecutionId: string | null = null
+/**
+ * 进行中的执行，按 executionId 索引。
+ *
+ * 此前用单个模块变量保存"当前执行 id"，两次快速点击运行会互相覆盖，
+ * 导致取消操作打到错误的运行上。
+ */
+const activeRuns = new Map<string, { startedAt: number }>()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -143,7 +149,7 @@ function setupIPC() {
   })
 
   // 执行工作流
-  ipcMain.handle('workflow:execute', async (_event, wf: WorkflowDefinition) => {
+  ipcMain.handle('workflow:execute', async (_event, wf: WorkflowDefinition, clientExecutionId?: string) => {
     try {
       // 输入校验
       const validation = validateWorkflow(wf)
@@ -160,12 +166,14 @@ function setupIPC() {
         return { success: false, error: plaintextSecretError(leaked) }
       }
 
-      currentExecutionId = `exec_${Date.now()}`
+      // 由渲染进程生成并在整个运行期间持有，取消才能精确命中自己启动的那一次
+      const executionId = clientExecutionId?.trim() || `exec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
       const runStartedAt = Date.now()
       let runFinishedAt = 0
+      activeRuns.set(executionId, { startedAt: runStartedAt })
 
       const onEvent = (evt: ExecutionEvent) => {
-        if (evt.type === 'workflow:complete' || evt.type === 'workflow:cancelled') {
+        if (evt.type === 'workflow:complete' || evt.type === 'workflow:cancelled' || evt.type === 'workflow:error') {
           runFinishedAt = evt.timestamp
         }
         mainWindow?.webContents.send('execution:update', evt)
@@ -184,7 +192,7 @@ function setupIPC() {
         maxTokens: m.maxTokens
       })).filter(m => m.apiKey)
 
-      const result = await engine.execute(wf, onEvent, currentExecutionId, secrets, models)
+      const result = await engine.execute(wf, onEvent, executionId, secrets, models)
 
       // 将 Map 转为普通对象以便 IPC 序列化
       const resultObj: Record<string, unknown> = {}
@@ -198,7 +206,7 @@ function setupIPC() {
         const wasCancelled = [...result.values()].some(r => r.status === 'cancelled')
         try {
           executionStorage?.saveExecution({
-            id: currentExecutionId,
+            id: executionId,
             workflowId: wf.id || 'unknown',
             workflowName: wf.name || '未命名',
             status: wasCancelled ? 'cancelled' : hasError ? 'error' : 'completed',
@@ -213,22 +221,23 @@ function setupIPC() {
         }
       }
 
-      currentExecutionId = null
-      return { success: true, result: resultObj }
+      activeRuns.delete(executionId)
+      return { success: true, result: resultObj, executionId }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err)
-      currentExecutionId = null
       return { success: false, error: message }
     }
   })
 
-  // 取消执行
-  ipcMain.handle('workflow:cancel', async () => {
-    if (currentExecutionId) {
-      const cancelled = engine.cancel(currentExecutionId)
-      return { success: cancelled }
+  // 取消执行：按 executionId 精确命中，不影响其他并发运行
+  ipcMain.handle('workflow:cancel', async (_event, executionId?: string) => {
+    const target = executionId ?? [...activeRuns.keys()].at(-1)
+    if (!target || !activeRuns.has(target)) {
+      return { success: false, error: '无活跃执行' }
     }
-    return { success: false, error: '无活跃执行' }
+    const cancelled = engine.cancel(target)
+    if (cancelled) activeRuns.delete(target)
+    return { success: cancelled }
   })
 
   // 保存工作流到本地文件

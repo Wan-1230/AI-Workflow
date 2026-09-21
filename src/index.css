@@ -52,6 +52,7 @@
   --c-sig-green: rgb(var(--c-green));
   --c-sig-amber: rgb(var(--c-amber));
   --c-sig-red: rgb(var(--c-red));
+  --c-sig-gray: rgb(var(--c-gray));
 
   /* 阴影（规范：轻 0 2px 8px / 重 0 4px 16px） */
   --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);

@@ -53,21 +53,24 @@ function BaseNodeComponent({ id, data, selected }: NodeProps) {
     running: 'var(--c-sig-amber)',
     success: 'var(--c-sig-green)',
     error: 'var(--c-sig-red)',
-    cancelled: 'var(--c-fg-faint)'
+    cancelled: 'var(--c-fg-faint)',
+    skipped: 'var(--c-sig-gray)'
   }
   const dotClass: Record<ExecutionStatus, string> = {
     idle: 'bg-fg-faint',
     running: 'bg-sig-amber animate-pulse',
     success: 'bg-sig-green',
     error: 'bg-sig-red',
-    cancelled: 'bg-fg-faint'
+    cancelled: 'bg-fg-faint',
+    skipped: 'bg-sig-gray'
   }
   const boxClass: Record<ExecutionStatus, string> = {
     idle: '',
     running: 'ring-2 ring-sig-amber/40',
     success: 'ring-1 ring-sig-green/50',
     error: 'bg-danger/8 ring-1 ring-sig-red/50',
-    cancelled: 'opacity-50'
+    cancelled: 'opacity-50',
+    skipped: 'opacity-45'
   }
 
   return (

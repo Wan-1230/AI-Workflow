@@ -16,7 +16,7 @@ import { useAppStore } from './app-store'
 import { toast } from './toast-store'
 import type { GlobalVariable, WorkflowDefinition } from '@shared/workflow'
 
-export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled'
+export type ExecutionStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled' | 'skipped'
 export type ExecutionPhase = 'idle' | 'running' | 'completed' | 'error' | 'cancelled'
 
 export interface ExecutionState {
@@ -29,6 +29,20 @@ export interface ExecutionState {
   streamingNodeId: string | null
   startedAt: number | null
   duration: number | null
+  /** 本次运行的 id，由本 store 生成并贯穿取消与历史 */
+  executionId: string | null
+}
+
+/** 空闲执行态：四处重置点共用一份，避免新增字段时漏项 */
+const IDLE_EXECUTION: ExecutionState = {
+  status: 'idle',
+  nodeStatuses: {},
+  logs: [],
+  streamTexts: {},
+  streamingNodeId: null,
+  startedAt: null,
+  duration: null,
+  executionId: null
 }
 
 /** 画布历史快照（撤销/重做） */
@@ -130,15 +144,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   workflowName: '未命名工作流',
   variables: [],
   selectedNodeId: null,
-  execution: {
-    status: 'idle',
-    nodeStatuses: {},
-    logs: [],
-    streamTexts: {},
-    streamingNodeId: null,
-    startedAt: null,
-    duration: null
-  },
+  execution: IDLE_EXECUTION,
   history: [],
   historyIndex: -1,
   canUndo: false,
@@ -367,7 +373,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       workflowName: '未命名工作流',
       variables: [],
       selectedNodeId: null,
-      execution: { status: 'idle', nodeStatuses: {}, logs: [], streamTexts: {}, streamingNodeId: null, startedAt: null, duration: null },
+      execution: IDLE_EXECUTION,
       history: [],
       historyIndex: -1,
       canUndo: false,
@@ -410,7 +416,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       workflowName: wf.name || '未命名工作流',
       variables: wf.variables || [],
       selectedNodeId: null,
-      execution: { status: 'idle', nodeStatuses: {}, logs: [], streamTexts: {}, streamingNodeId: null, startedAt: null, duration: null },
+      execution: IDLE_EXECUTION,
       history: [],
       historyIndex: -1,
       canUndo: false,
@@ -439,6 +445,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       return
     }
 
+    // id 由渲染层生成：取消发生在运行期间，而 executeWorkflow 到整条跑完才 resolve
+    const executionId = `exec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
     set({
       execution: {
         status: 'running',
@@ -447,7 +456,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         streamTexts: {},
         streamingNodeId: null,
         startedAt: Date.now(),
-        duration: null
+        duration: null,
+        executionId
       }
     })
 
@@ -476,12 +486,17 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         } else if (event.type === 'node:cancelled' && event.nodeId) {
           s.setNodeStatus(event.nodeId, 'cancelled')
           s.addLog(event.nodeId, '已取消')
+        } else if (event.type === 'node:skipped' && event.nodeId) {
+          // 分支未命中或按 skip 策略降级：必须落到终态，否则节点永久停在 running
+          s.setNodeStatus(event.nodeId, 'skipped')
+          const reason = (event.data as { error?: string } | undefined)?.error
+          s.addLog(event.nodeId, reason ? `已跳过：${reason}` : '已跳过')
         }
       })
 
       let result: Awaited<ReturnType<typeof window.api.executeWorkflow>>
       try {
-        result = await window.api.executeWorkflow(wf)
+        result = await window.api.executeWorkflow(wf, executionId)
       } finally {
         unsubscribe()
       }
@@ -526,26 +541,18 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   cancelExecution: async () => {
     try {
-      const res = await window.api.cancelExecution()
+      const res = await window.api.cancelExecution(get().execution.executionId ?? undefined)
       if (res.success) {
         toast.info('正在取消执行...')
+      } else {
+        toast.warning(res.error || '取消失败：没有正在执行的运行')
       }
-    } catch {
-      // 忽略
+    } catch (err: unknown) {
+      toast.error('取消失败', err instanceof Error ? err.message : String(err))
     }
   },
 
-  resetExecution: () => set({
-    execution: {
-      status: 'idle',
-      nodeStatuses: {},
-      logs: [],
-      streamTexts: {},
-      streamingNodeId: null,
-      startedAt: null,
-      duration: null
-    }
-  }),
+  resetExecution: () => set({ execution: IDLE_EXECUTION }),
 
   addLog: (nodeId, message, output) => {
     set({

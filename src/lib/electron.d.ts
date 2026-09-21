@@ -24,8 +24,8 @@ export interface ElectronAPI {
   }
 
   // 执行工作流
-  executeWorkflow: (wf: WorkflowDefinition) => Promise<{ success: boolean; result?: Record<string, NodeResult>; error?: string }>
-  cancelExecution: () => Promise<{ success: boolean; error?: string }>
+  executeWorkflow: (wf: WorkflowDefinition, executionId?: string) => Promise<{ success: boolean; result?: Record<string, NodeResult>; executionId?: string; error?: string }>
+  cancelExecution: (executionId?: string) => Promise<{ success: boolean; error?: string }>
 
   // 保存/加载工作流（文件系统）
   saveWorkflow: (filePath: string, data: WorkflowDefinition) => Promise<{ success: boolean }>

@@ -29,13 +29,13 @@ contextBridge.exposeInMainWorld('api', {
     resetZoom: () => ipcRenderer.invoke('app:resetZoom')
   },
 
-  // 执行工作流
-  executeWorkflow: (wf: WorkflowDefinition) =>
-    ipcRenderer.invoke('workflow:execute', wf),
+  // 执行工作流（executionId 由渲染进程生成，便于运行中精确取消）
+  executeWorkflow: (wf: WorkflowDefinition, executionId?: string) =>
+    ipcRenderer.invoke('workflow:execute', wf, executionId),
 
   // 取消执行
-  cancelExecution: () =>
-    ipcRenderer.invoke('workflow:cancel'),
+  cancelExecution: (executionId?: string) =>
+    ipcRenderer.invoke('workflow:cancel', executionId),
 
   // 保存/加载工作流
   saveWorkflow: (filePath: string, data: WorkflowDefinition) =>
