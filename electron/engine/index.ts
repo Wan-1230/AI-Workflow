@@ -16,6 +16,8 @@ export interface LoopScopeVars {
 import { parseWorkflow } from './parser'
 import { Scheduler } from './scheduler'
 import { Executor } from './executor'
+import { VectorStore } from './rag/vector-store'
+import type { RagIndex } from '@shared/rag'
 
 /**
  * 工作流执行引擎
@@ -30,6 +32,18 @@ import { Executor } from './executor'
 export class WorkflowEngine {
   private scheduler = new Scheduler()
   private executor = new Executor()
+  /**
+   * RAG 索引由构造方注入。
+   *
+   * 此前它是 rag-upload 里的模块级单例：主进程不知道它存在，也就没人给它落盘路径，
+   * 于是"重启后索引还在"这件事从来没有实现过。默认值仍给一个内存实例，
+   * 但生产入口（主进程）必须传带文件 IO 的那个。
+   */
+  private rag: RagIndex
+
+  constructor(deps: { rag?: RagIndex } = {}) {
+    this.rag = deps.rag ?? new VectorStore()
+  }
 
   // 当前活跃的执行取消控制器
   private activeAborts = new Map<string, AbortController>()
@@ -244,6 +258,7 @@ export class WorkflowEngine {
           signal: abortController.signal,
           stream,
           scope,
+          rag: this.rag,
           logger: (nid, msg) => {
             onEvent({ type: 'node:log', nodeId: nid, data: { message: msg }, timestamp: Date.now() })
           }

@@ -9,6 +9,9 @@ import { ModelStore } from '../../electron/engine/storage/models'
 import { PromptStore } from '../../electron/engine/storage/prompts'
 import { SettingsStore } from '../../electron/engine/storage/settings'
 import { workflowTemplates } from '../../electron/engine/templates'
+import { closeAllMcpClients } from '../../electron/engine/mcp/client'
+import { VectorStore } from '../../electron/engine/rag/vector-store'
+import { FileIndexIo, RAG_INDEX_FILE } from '../../electron/engine/rag/index-store'
 import { runMigrations, MigrationError, type MigrationReport } from './db/index'
 import { migrations } from './db/migrations'
 import { redactSecrets, scanWorkflowSecrets } from '../../electron/engine/secrets-guard'
@@ -20,7 +23,13 @@ import type { PromptTemplateInput } from '@shared/prompt'
 import type { AppSettingsInput } from '@shared/settings'
 
 let mainWindow: BrowserWindow | null = null
-const engine = new WorkflowEngine()
+
+/**
+ * RAG 索引要在 app ready 之后才能拿到 userData 路径，因此引擎先在模块级
+ * 持一个内存实例（保证任何时刻都可用），ready 时换成落盘实例。
+ */
+let engine = new WorkflowEngine()
+let ragIndex: VectorStore | null = null
 
 /** app.getPath 允许的路径类型 */
 const ALLOWED_APP_PATHS = ['userData', 'documents', 'desktop', 'downloads', 'temp', 'home'] as const
@@ -650,6 +659,16 @@ function abortStartup(title: string, detail: unknown, backupHint?: string): neve
 }
 
 app.whenReady().then(() => {
+  // 向量库落盘：没有这一步，"重启后索引还在"就只是 README 里的一句话
+  try {
+    ragIndex = new VectorStore(new FileIndexIo(join(app.getPath('userData'), RAG_INDEX_FILE)))
+    engine = new WorkflowEngine({ rag: ragIndex })
+  } catch (err: unknown) {
+    // 落盘失败不阻断启动：退化为内存索引，但必须喊出来，
+    // 否则用户会以为入库结果会跨重启保留
+    console.warn(`[rag] 索引文件不可用，本次运行退回内存索引：${err instanceof Error ? err.message : String(err)}`)
+  }
+
   // 凭证管理器最先建立：迁移需要把明文密钥升格为加密凭证
   try {
     credentialManager = new CredentialManager()
@@ -740,6 +759,9 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  // 在飞的 MCP 子进程不会因为父进程退出就自己消失，
+  // Windows 上尤其是这样（cmd 壳死了，node 孙进程还在）。
+  closeAllMcpClients()
   executionStorage?.close()
   credentialManager?.close()
   projectStore?.close()

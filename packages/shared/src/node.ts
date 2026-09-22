@@ -81,6 +81,8 @@ export interface NodeContext {
    * 让体内任意节点（不只是模板类节点）都能取到当前项。
    */
   scope?: { item?: unknown; index?: number; count?: number; loopId?: string }
+  /** RAG 索引（入库/检索节点用）；缺省时节点应报错而不是静默建一个内存库 */
+  rag?: import('./rag').RagIndex
 }
 
 export type NodeExecuteFn = (ctx: NodeContext) => Promise<Record<string, unknown>>

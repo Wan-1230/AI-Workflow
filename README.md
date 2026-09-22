@@ -70,10 +70,10 @@ pnpm package
 | 逻辑 | 📂 子工作流 | 嵌套执行内嵌工作流 JSON，「输入数据」字段（可插值）注入为 `{{global.sub_input}}` |
 | AI | 🤖 LLM 调用 | OpenAI 兼容接口，支持流式输出、系统/用户提示词 |
 | AI | 📝 提示词模板 | `{{varName}}` 占位符渲染，缺失变量提示 |
-| Agent | 🛠️ 工具调用 | 内置工具（HTTP/时间/数学/UUID）或 MCP 服务器工具 |
+| Agent | 🛠️ 工具调用 | 内置工具（HTTP/时间/数学/UUID）或 MCP 服务器工具；HTTP 工具继承超时、取消与出网校验 |
 | Agent | 🧠 子 Agent 委派 | 以角色提示词委派 LLM 完成子任务 |
-| RAG | 📚 文档入库 | 文本/文件切分（可配重叠）后建索引；当前为进程内词频向量，重启即失效 |
-| RAG | 🎯 向量检索 | 词频余弦相似度检索，输出合并上下文供 LLM 引用（非语义 embedding） |
+| RAG | 📚 文档入库 | 切分入库，按内容哈希去重；填「向量模型名」后改用语义 embedding |
+| RAG | 🎯 向量检索 | TF-IDF 或 embedding 余弦检索，索引落盘，重启后仍在 |
 
 ## 🔧 变量与插值语法
 
@@ -101,8 +101,10 @@ pnpm package
 │   └── engine/               # 工作流引擎
 │       ├── index.ts          # 引擎：拓扑排序 / 并行分组 / 子工作流递归 / 流式事件
 │       ├── executor/         # 执行器：变量解析 / 插值 / 超时 / 重试
-│       ├── nodes/            # 节点注册表 + 16 个节点实现
-│       ├── mcp/              # MCP 客户端（stdio / SSE）
+│       ├── nodes/            # 节点注册表 + 17 个节点实现
+│       ├── mcp/              # MCP 客户端（stdio 子进程 / HTTP JSON-RPC）
+│       ├── net/              # 出网安全：SSRF 判定与带超时/取消/体积上限的 fetch
+│       ├── rag/              # 切分、TF-IDF 与 embedding 索引、落盘
 │       ├── scheduler/        # 拓扑排序（Kahn）与并行分组
 │       └── templates.ts      # 4 个工作流模板构建器
 ├── packages/shared/          # 前后端共享类型（workflow/project/model/prompt/settings）
@@ -128,8 +130,9 @@ pnpm package
 | `prompts.db` | 提示词模板库 |
 | `executions.db` | 执行历史 |
 | `settings.db` | 应用设置 |
+| `credentials.db` | 安全凭证（值经系统密钥环加密；密钥环不可用时拒绝启动） |
 | `app.db` | 数据库迁移版本与迁移记录（含每次破坏性迁移的备份路径） |
-| `vector-store/` | RAG 索引目录（当前仅缓存分块文本，向量本体在内存，重启失效） |
+| `rag-index.json` | RAG 索引落盘（scheme + 分块 + 词频/embedding 向量），可删可备份 |
 | `backups/` | 破坏性迁移前的 `VACUUM INTO` 全量备份 |
 
 ## 📦 常用命令
@@ -151,12 +154,48 @@ pnpm package
 诚实清单，避免文档跑在实现前面：
 
 - **仅 Windows 验证**：原生模块与打包链路都在 Windows 上跑通；Linux/macOS 未验证，CI 亦只跑 `windows-latest`。
-- **RAG 是词频检索，不是语义检索**：索引为 TF 词频向量且只存内存，重启即失效。真正的 embedding 与向量持久化在计划中。
+- **RAG 默认仍是词法检索**：不填「向量模型名」时是 TF-IDF（含 IDF 与长度归一），不是语义检索；填了才调 `/embeddings`。两种分数不可比，切换需清空索引重建（节点里有「入库前清空索引」）。
+- **SSRF 防护有已知边界**：按解析后的 IP 判定并逐跳复检重定向，但 Node 的 fetch 不支持注入 resolver，「校验后 DNS 重绑」这一类攻击面无法在本层关闭。所以 `allowPrivateNetwork` 只对你自己写的 URL 可信。
+- **远程 MCP 是 HTTP JSON-RPC，不是 SSE**：只向 `${url}/messages` POST，没有 event-stream 订阅与会话 id。
 - **循环串行、无 break/continue**：循环体逐轮串行执行，中途失败按该节点的执行策略处置（`stop` 会中止整个运行）。单次迭代项数上限 500。
 - **无崩溃上报与匿名统计**：本地优先，因此出问题只能靠 `%APPDATA%/ai-workflow` 下的日志与 `backups/` 排查。
 - **UI 层无自动化测试**：测试止于引擎与数据契约；界面正确性仍靠人工验证。
 
 ## 🔄 变更说明
+
+### RAG：去重、落盘，以及可选的真语义检索（行为变更）
+
+以前「文档入库」是往一个模块级内存单例里塞裸词频：重启即清空，而且同一段文本每跑一次
+就多一份拷贝，Top-K 会被同一篇文档的 N 份重复片段塞满。现在：
+
+- 索引按内容哈希去重，落在 `userData/rag-index.json`（tmp+rename 原子写），重启后仍在；
+- 打分改成 TF-IDF，IDF 在检索时计算，所以增删文档不需要重算任何历史向量；
+- 填了「向量模型名」才会去调 `/embeddings`，此时是真语义检索；留空仍走 TF-IDF。
+  模型库里的 `model` 是聊天模型名，拿它请求 embeddings 通常 404，所以 embedding 模型名单独填，
+  「向量模型来源」只负责提供 Base URL 与 Key；
+- 索引会记住自己是用哪种方式建的（scheme）。方式不一致时直接报错并说明怎么重建，
+  而不是悄悄退回词频 —— 那会让人以为花钱建的 embedding 生效了。
+
+### 出网请求统一过闸（行为变更）
+
+HTTP 节点与内置 `http-get` / `http-post` 工具此前各自裸调 `fetch`：工具那条既不判内网、
+也不传 `signal`（取消之后请求还在飞）。现在都走同一层，超时/取消/10MB 上限/SSRF 一次到位。
+
+SSRF 判定从"字符串匹配 `^127\.`"改成**按解析后的 IP**，并跟随重定向逐跳复检：
+`http://2130706433/`、`http://127.1/`、`http://[::ffff:127.0.0.1]/`、以及"公共域名解析到回环"
+过去都能过关，一条开放重定向更是可以直接把请求送进 `169.254.169.254`。
+
+另外：`allowPrivateNetwork` 与 `timeoutMs` 过去在节点界面里根本没有开关（代码读得到，
+catalog 没声明），于是本地工具默认连自己的本机服务都调不到。现在它们是真正的复选框与数字框，
+而云元数据段（169.254.0.0/16、fe80::/10）即便打开开关也仍然拒绝。
+
+### MCP 子进程不再泄漏
+
+`connect()` 里只有"服务端返回 error"这一支会 `close()`，而最常见的失败形态是握手超时或
+进程没输出 —— 那走 reject，异常抛出后没人管那个子进程，失败一次漏一个。现在握手的任何失败
+路径都回收进程；Windows 上经 `taskkill /T /F` 连进程树一起收（只 `kill()` 会留下 npx 拉起的
+node 孙进程）；应用退出时统一回收。
+
 
 ### 循环改为真实逐项执行（行为变更）
 

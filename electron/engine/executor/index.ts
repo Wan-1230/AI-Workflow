@@ -140,6 +140,7 @@ export class Executor {
       models: context.models,
       signal: attempt.signal as AbortSignal,
       scope: context.scope,
+      rag: context.rag,
       logger: (msg: string) => context.logger(node.id, msg),
       stream: context.stream
         ? (chunk: Parameters<NonNullable<typeof context.stream>>[0]) => {

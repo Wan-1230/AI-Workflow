@@ -51,7 +51,9 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       url: 'https://api.github.com/zen',
       method: 'GET',
       headers: '{}',
-      body: ''
+      body: '',
+      timeoutMs: 30000,
+      allowPrivateNetwork: false
     },
     fields: [
       { key: 'url', label: '请求地址', type: 'text', placeholder: 'https://...' },
@@ -60,12 +62,17 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
         { value: 'PUT', label: 'PUT' }, { value: 'DELETE', label: 'DELETE' }
       ] },
       { key: 'headers', label: '请求头 (JSON)', type: 'json', help: '如 {"Authorization": "Bearer xxx"}' },
-      { key: 'body', label: '请求体', type: 'textarea', rows: 3, help: 'POST/PUT 时使用' }
+      { key: 'body', label: '请求体', type: 'textarea', rows: 3, help: 'POST/PUT 时使用' },
+      { key: 'timeoutMs', label: '超时 (ms)', type: 'number', help: '默认 30000；到点会中止在飞的请求' },
+      { key: 'allowPrivateNetwork', label: '允许内网地址', type: 'boolean', help: '调本机/局域网服务时打开。云元数据段（169.254.0.0/16）始终禁止；不要在工作流 JSON 里替别人打开它' }
     ],
     outputs: [
       { name: 'status', label: 'HTTP 状态码', type: 'number' },
       { name: 'data', label: '响应体', type: 'any' },
-      { name: 'headers', label: '响应头', type: 'object' }
+      { name: 'headers', label: '响应头', type: 'object' },
+      { name: 'finalUrl', label: '最终地址（跟过跳转后）', type: 'string' },
+      { name: 'redirects', label: '跳转次数', type: 'number' },
+      { name: 'size', label: '响应体字符数', type: 'number' }
     ]
   },
   'code-exec': {
@@ -426,7 +433,7 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
     id: 'rag-upload',
     category: 'rag',
     displayName: '文档入库',
-    description: '文本/文件切分向量化，写入本地向量库',
+    description: '切分入库：默认 TF-IDF，填向量模型名后做语义 embedding',
     icon: '📚',
     color: '#0FC6C2',
     defaultConfig: {
@@ -435,7 +442,10 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       filePath: '',
       docId: '',
       chunkSize: 500,
-      overlap: 80
+      overlap: 80,
+      embeddingModel: '',
+      embeddingProviderId: '',
+      rebuild: false
     },
     fields: [
       { key: 'source', label: '内容来源', type: 'select', options: [
@@ -445,38 +455,51 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       { key: 'filePath', label: '文件路径', type: 'text', help: 'source=file 时使用，UTF-8 编码' },
       { key: 'docId', label: '文档 ID', type: 'text', placeholder: '留空自动生成' },
       { key: 'chunkSize', label: '分块大小 (字符)', type: 'number' },
-      { key: 'overlap', label: '重叠 (字符)', type: 'number', help: '相邻分块重叠，提升检索连续性' }
+      { key: 'overlap', label: '重叠 (字符)', type: 'number', help: '相邻分块重叠，提升检索连续性' },
+      { key: 'embeddingModel', label: '向量模型名', type: 'text', help: '留空 = 用 TF-IDF 词频检索；填 embedding 模型名（如 text-embedding-3-small、bge-m3）才做语义检索' },
+      { key: 'embeddingProviderId', label: '向量模型来源', type: 'select', dataSource: 'models', help: '提供 Base URL 与 Key 的模型配置；模型名以上方「向量模型名」为准' },
+      { key: 'rebuild', label: '入库前清空索引', type: 'boolean', help: '切换检索方式（TF-IDF ↔ embedding）或换模型时用，否则会报 scheme 冲突' }
     ],
     executionLimits: { timeoutMs: 600000 },
     outputs: [
       { name: 'docId', label: '文档 ID', type: 'string' },
       { name: 'chunkCount', label: '分块数', type: 'number' },
-      { name: 'chunks', label: '分块列表', type: 'object[]' },
-      { name: 'totalSize', label: '总字符数', type: 'number' }
+      { name: 'chunks', label: '分块文本', type: 'string[]' },
+      { name: 'deduped', label: '内容重复而跳过', type: 'boolean' },
+      { name: 'hash', label: '内容哈希', type: 'string' },
+      { name: 'totalSize', label: '索引分块数', type: 'number' },
+      { name: 'stats', label: '索引统计', type: 'object' },
+      { name: 'preview', label: '首块预览', type: 'string' }
     ]
   },
   'rag-retrieve': {
     id: 'rag-retrieve',
     category: 'rag',
     displayName: '向量检索',
-    description: '按语义相似度从向量库检索相关内容',
+    description: 'Top-K 片段检索：embedding 或 TF-IDF，取决于索引建立方式',
     icon: '🎯',
     color: '#0FC6C2',
     defaultConfig: {
       query: '',
       topK: 5,
-      minScore: 0.05
+      minScore: 0.05,
+      embeddingModel: '',
+      embeddingProviderId: ''
     },
     fields: [
       { key: 'query', label: '检索问题', type: 'textarea', rows: 3, help: '支持 {{nodeId.field}} 插值' },
       { key: 'topK', label: '返回条数', type: 'number' },
-      { key: 'minScore', label: '最低相似度', type: 'number', help: '0~1，过滤低相关片段' }
+      { key: 'minScore', label: '最低相似度', type: 'number', help: '0~1，过滤低相关片段' },
+      { key: 'embeddingModel', label: '向量模型名', type: 'text', help: '必须与入库时用的一致；留空则按 TF-IDF 检索' },
+      { key: 'embeddingProviderId', label: '向量模型来源', type: 'select', dataSource: 'models', help: '提供 Base URL 与 Key' }
     ],
     outputs: [
       { name: 'results', label: '检索结果数组', type: 'object[]' },
       { name: 'topText', label: '最相关片段文本', type: 'string' },
       { name: 'combined', label: '合并后的上下文', type: 'string' },
-      { name: 'count', label: '返回条数', type: 'number' }
+      { name: 'count', label: '返回条数', type: 'number' },
+      { name: 'mode', label: '本次检索方式', type: 'string' },
+      { name: 'query', label: '实际检索问题', type: 'string' }
     ]
   }
 }

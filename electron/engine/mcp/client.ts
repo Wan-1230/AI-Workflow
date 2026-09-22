@@ -1,6 +1,7 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
+import { spawn, execFile, type ChildProcess, type ChildProcessWithoutNullStreams } from 'child_process'
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { assertUrlAllowed } from '../net/ssrf'
 
 /**
  * 解析待执行的命令与参数。
@@ -59,6 +60,8 @@ export interface McpServerConfig {
   serverUrl?: string
   /** 请求超时 ms */
   timeoutMs?: number
+  /** 远程地址解析不出来等情况的出声口 */
+  logger?: (msg: string) => void
 }
 
 interface JsonRpcRequest {
@@ -82,6 +85,17 @@ export class McpError extends Error {
   }
 }
 
+const liveClients = new Set<McpClient>()
+
+/** 应用退出前统一回收，避免留下孤儿 MCP 进程 */
+export function closeAllMcpClients(): number {
+  const n = liveClients.size
+  for (const c of [...liveClients]) {
+    try { c.close() } catch { /* 关闭失败不阻断退出 */ }
+  }
+  return n
+}
+
 export class McpClient {
   private config: McpServerConfig
   private proc: ChildProcessWithoutNullStreams | null = null
@@ -94,6 +108,7 @@ export class McpClient {
 
   constructor(config: McpServerConfig) {
     this.config = config
+    liveClients.add(this)
   }
 
   get isConnected(): boolean {
@@ -104,6 +119,10 @@ export class McpClient {
   /** 建立连接（stdio 或 SSE），并完成 initialize 握手 */
   async connect(): Promise<void> {
     if (this.config.serverUrl) {
+      // 远程 MCP 就是普通 HTTP 出口，同样不许指到内网/元数据段
+      await assertUrlAllowed(this.config.serverUrl, {
+        warn: msg => this.config.logger?.(msg)
+      })
       this.serverUrl = this.config.serverUrl.replace(/\/+$/, '')
       // SSE 连接建立：先做一次 initialize（服务端流式响应通过 events 接口）
       // 简化实现：initialize 通过 POST 完成
@@ -126,6 +145,12 @@ export class McpClient {
       stdio: ['pipe', 'pipe', 'pipe']
     })
 
+    // 对端已退出时 stdin.write 会抛 EPIPE；它落在事件回调里就是未捕获异常，
+    // 能直接把整个主进程干掉。这里一律转成"连接失效 + 可控 reject"。
+    this.proc.stdin.on('error', err => {
+      this.dead = true
+      this.rejectAll(new McpError(`MCP 写入失败: ${err.message}`))
+    })
     this.proc.stdout.on('data', chunk => this.handleChunk(chunk.toString()))
     this.proc.stderr.on('data', chunk => {
       const text = chunk.toString().trim()
@@ -143,15 +168,23 @@ export class McpClient {
       this.proc = null
     })
 
-    // initialize 握手
-    const res = await this.request('initialize', {
-      protocolVersion: '2024-11-05',
-      capabilities: {},
-      clientInfo: { name: 'ai-workflow', version: '1.0.0' }
-    })
-    if (res.error) {
+    // initialize 握手。原实现在 res.error 分支才 close()，
+    // 而 request() 超时/进程 ENOENT 走的是 reject：异常抛出后子进程留在后台，
+    // 每次失败的连接漏一个，跑 20 次就是一堆僵尸 node 进程。
+    try {
+      const res = await this.request('initialize', {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'ai-workflow', version: '1.0.0' }
+      })
+      if (res.error) {
+        throw new McpError(`MCP initialize 失败: ${res.error.message}`)
+      }
+    } catch (err: unknown) {
       this.close()
-      throw new McpError(`MCP initialize 失败: ${res.error.message}`)
+      throw err instanceof McpError ? err : new McpError(
+        `MCP 握手失败: ${err instanceof Error ? err.message : String(err)}`
+      )
     }
   }
 
@@ -181,14 +214,14 @@ export class McpClient {
     return (res.result as { content?: unknown[] })?.content ?? res.result
   }
 
-  /** 关闭连接 */
+  /** 关闭连接：必须先杀干净进程树，否则孙进程继续占着端口与内存 */
   close(): void {
-    if (this.proc) {
-      this.proc.kill()
-      this.proc = null
-    }
+    liveClients.delete(this)
+    const proc = this.proc
+    this.proc = null
     this.serverUrl = null
     this.rejectAll(new McpError('连接已关闭'))
+    if (proc) terminateTree(proc)
   }
 
   // ===== 内部实现 =====
@@ -274,6 +307,33 @@ export class McpClient {
       entry.reject(err)
     }
     this.pending.clear()
+  }
+}
+
+/**
+ * 终止进程及其子进程。
+ *
+ * Windows 上我们经 `cmd.exe /c xxx.cmd` 承载，kill() 只结束那层壳，
+ * npx 真正拉起的 node 子进程会留在后台。taskkill /T 才能连树一起收。
+ * 用 execFile + 参数数组，不经过 shell。
+ */
+export function terminateTree(proc: ChildProcess): void {
+  const pid = proc.pid
+  if (process.platform === 'win32' && typeof pid === 'number') {
+    execFile(
+      'taskkill',
+      ['/pid', String(pid), '/T', '/F'],
+      { windowsHide: true },
+      () => {
+        // taskkill 失败（进程已自己退出等）不声张，兜底 kill 仍在下面
+      }
+    )
+    return
+  }
+  try {
+    proc.kill()
+  } catch {
+    /* 已退出的进程 kill 会抛 ESRCH，忽略 */
   }
 }
 

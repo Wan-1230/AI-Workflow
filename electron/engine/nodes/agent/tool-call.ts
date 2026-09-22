@@ -1,40 +1,46 @@
 import type { NodeContext, NodeExecuteFn } from '@shared/node'
 import { McpClient, McpError, isMcpTextContent } from '../../mcp/client'
+import { safeFetch, parseMaybeJson } from '../../net/http-fetch'
 
 
 /* ===== 内置工具（真实可用，不依赖外部服务） ===== */
 
 const BUILTIN_TOOLS: Record<string, { description: string; run: (args: Record<string, unknown>, ctx: NodeContext) => Promise<unknown> }> = {
+  // 这两个工具过去直接裸调 fetch：不传 signal（取消之后请求还在飞）、
+  // 没有超时、不判内网。工具是 Agent 能自己挑的入口，比节点更需要同一道闸。
   'http-get': {
-    description: '发送 HTTP GET 请求，参数: url, headers',
-    run: async args => {
+    description: '发送 HTTP GET 请求，参数: url, headers, timeoutMs',
+    run: async (args, ctx) => {
       const url = String(args.url || '')
       if (!url) throw new Error('缺少 url 参数')
-      const res = await fetch(url, { headers: { 'User-Agent': 'AIWorkflow/1.0' } })
-      const text = await res.text()
-      let data: unknown = text
-      try { data = JSON.parse(text) } catch { /* 保留原文 */ }
-      return { status: res.status, data }
+      const res = await safeFetch({
+        url,
+        method: 'GET',
+        headers: asHeaders(args.headers),
+        timeoutMs: asTimeout(args.timeoutMs),
+        signal: ctx.signal,
+        allowPrivateNetwork: args.allowPrivateNetwork === true,
+        logger: msg => ctx.logger(msg)
+      })
+      return { status: res.status, data: parseMaybeJson(res.body), finalUrl: res.finalUrl }
     }
   },
   'http-post': {
-    description: '发送 HTTP POST 请求，参数: url, body(JSON), headers',
-    run: async args => {
+    description: '发送 HTTP POST 请求，参数: url, body(JSON), headers, timeoutMs',
+    run: async (args, ctx) => {
       const url = String(args.url || '')
       if (!url) throw new Error('缺少 url 参数')
-      const res = await fetch(url, {
+      const res = await safeFetch({
+        url,
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'AIWorkflow/1.0',
-          ...(args.headers as Record<string, string> | undefined)
-        },
-        body: typeof args.body === 'string' ? args.body : JSON.stringify(args.body ?? {})
+        headers: { 'Content-Type': 'application/json', ...asHeaders(args.headers) },
+        body: typeof args.body === 'string' ? args.body : JSON.stringify(args.body ?? {}),
+        timeoutMs: asTimeout(args.timeoutMs),
+        signal: ctx.signal,
+        allowPrivateNetwork: args.allowPrivateNetwork === true,
+        logger: msg => ctx.logger(msg)
       })
-      const text = await res.text()
-      let data: unknown = text
-      try { data = JSON.parse(text) } catch { /* 保留原文 */ }
-      return { status: res.status, data }
+      return { status: res.status, data: parseMaybeJson(res.body), finalUrl: res.finalUrl }
     }
   },
   'now': {
@@ -67,6 +73,19 @@ const BUILTIN_TOOLS: Record<string, { description: string; run: (args: Record<st
       return { value: randomUUID() }
     }
   }
+}
+
+/** 工具参数来自模型或工作流 JSON，形状一律不保证 */
+function asHeaders(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, String(v)])
+  )
+}
+
+function asTimeout(value: unknown): number | undefined {
+  const n = Number(value)
+  return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
 export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
@@ -105,7 +124,7 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
     try {
       client = new McpClient(
         serverUrl
-          ? { serverUrl, timeoutMs }
+          ? { serverUrl, timeoutMs, logger: (msg: string) => ctx.logger(msg) }
           : { command, args: argsStr ? argsStr.split(/\s+/) : [], timeoutMs }
       )
       ctx.logger(`连接 MCP 服务器: ${serverUrl || command}`)

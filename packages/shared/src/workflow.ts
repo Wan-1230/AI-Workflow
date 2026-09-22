@@ -72,6 +72,8 @@ export interface ExecutionContext {
   stream?: (chunk: StreamChunk) => void
   /** 循环体作用域（仅循环体内节点的执行上下文携带） */
   scope?: { item?: unknown; index?: number; count?: number; loopId?: string }
+  /** RAG 索引；由引擎注入，节点不自己 new 一个内存库（那样重启即失效） */
+  rag?: import('./rag').RagIndex
 }
 
 export interface NodeResult {
