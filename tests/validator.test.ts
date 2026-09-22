@@ -45,8 +45,8 @@ function chain(
 }
 
 describe('校验器 —— 节点类型放行', () => {
-  it('全部 16 类节点均通过校验（E1 回归锁：曾因白名单写死 5 类而拒绝 11 类）', () => {
-    expect(catalogNodeTypes).toHaveLength(16)
+  it('全部节点类型均通过校验（E1 回归锁：曾因白名单写死 5 类而拒绝其余类型）', () => {
+    expect(catalogNodeTypes.length).toBeGreaterThanOrEqual(16)
     for (const type of catalogNodeTypes) {
       const res = validateWorkflow(oneNode(type))
       expect(res.errors, `节点 ${type} 应可执行，实际: ${formatValidationIssues(res.errors)}`).toEqual([])
@@ -159,6 +159,38 @@ describe('校验器 —— 跨节点插值引用', () => {
     const res = validateWorkflow(wf)
     expect(res.valid).toBe(true)
     expect(res.warnings.some(w => /未声明输出/.test(w.message))).toBe(true)
+  })
+})
+
+describe('校验器 —— 循环体可见性', () => {
+  /** trigger → loop(body → b1 → loop-end)，done 出口留给各用例自行接 */
+  function loopGadget(outer: Array<{ id: string; type: string; config?: Record<string, unknown> }>) {
+    return {
+      specs: [
+        { id: 't', type: 'manual-trigger' },
+        { id: 'L', type: 'loop', config: { items: ['a', 'b'] } },
+        { id: 'b1', type: 'text-process', config: { text: '{{item}}', operation: 'trim' } },
+        { id: 'E', type: 'loop-end' },
+        ...outer
+      ],
+      links: [
+        { source: 't', target: 'L' },
+        { source: 'L', target: 'b1', sourceHandle: 'body' },
+        { source: 'b1', target: 'E' }
+      ]
+    }
+  }
+
+  it('done 下游引用体内节点合法（引擎把末轮体内结果并入父层）', () => {
+    const g = loopGadget([{ id: 'after', type: 'notification', config: { message: '{{b1.text}}' } }])
+    const res = validateWorkflow(chain(g.specs, [...g.links, { source: 'L', target: 'after', sourceHandle: 'done' }]))
+    expect(res.errors).toEqual([])
+  })
+
+  it('循环之外的节点引用体内节点仍报错（体内输出只在 done 之后可见）', () => {
+    const g = loopGadget([{ id: 'peer', type: 'notification', config: { message: '{{b1.text}}' } }])
+    const res = validateWorkflow(chain(g.specs, [...g.links, { source: 't', target: 'peer' }]))
+    expect(res.errors.some(e => e.nodeId === 'peer' && /b1/.test(e.message))).toBe(true)
   })
 })
 

@@ -1,4 +1,5 @@
 import { nodeCatalog, catalogNodeTypes } from './node-catalog'
+import { analyzeLoopScopes } from './loop-scopes'
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge } from './workflow'
 
 const MAX_NODES = 100
@@ -162,8 +163,50 @@ export function validateWorkflow(wf: unknown): ValidationResult {
   }
 
   validateInterpolations(nodes, edges, nodeIds, errors, warnings)
+  validateLoopScopes(nodes, edges, errors)
+  validateSubWorkflowInputs(nodes, edges, warnings)
 
   return { valid: errors.length === 0, errors, warnings }
+}
+
+/**
+ * 子工作流的 {{global.sub_input}} 只有在父级填了「输入数据」或接了上游时才有值；
+ * 两者皆空时子流程会在运行期抛"全局变量未定义"，在这里提前给出定位。
+ */
+function validateSubWorkflowInputs(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  warnings: ValidationIssue[]
+): void {
+  for (const node of nodes) {
+    if (node.type !== 'sub-workflow') continue
+    if (!/\{\{\s*global\.sub_input/.test(String(node.config.workflowJson ?? ''))) continue
+    if (typeof node.config.input === 'string' && node.config.input.trim()) continue
+    if (edges.some(e => e.target === node.id)) continue
+
+    warnings.push({
+      nodeId: node.id,
+      field: 'input',
+      message: '子工作流引用了 {{global.sub_input}}，但本节点既未填「输入数据」也没有上游连线，运行时会因该变量不存在而失败'
+    })
+  }
+}
+
+/**
+ * 循环体结构：body 子图必须恰好有一个 loop-end 终点、无回边、不被体外连线污染。
+ * 推断逻辑与引擎共用同一份实现（@shared/loop-scopes），避免"校验通过但引擎拒绝"。
+ */
+function validateLoopScopes(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+  errors: ValidationIssue[]
+): void {
+  if (!nodes.some(n => n.type === 'loop')) return
+
+  const analysis = analyzeLoopScopes(nodes, edges)
+  for (const problem of analysis.problems) {
+    errors.push({ nodeId: problem.loopId, message: problem.message })
+  }
 }
 
 /**
@@ -187,6 +230,8 @@ function validateInterpolations(
     else incoming.set(e.target, [e.source])
   }
 
+  const scopeByLoopId = new Map(analyzeLoopScopes(nodes, edges).scopes.map(s => [s.loopId, s]))
+
   const ancestorsOf = (id: string): Set<string> => {
     const seen = new Set<string>()
     const queue = [...(incoming.get(id) ?? [])]
@@ -195,6 +240,14 @@ function validateInterpolations(
       if (seen.has(cur)) continue
       seen.add(cur)
       queue.push(...(incoming.get(cur) ?? []))
+    }
+
+    // 循环体节点对其 done 下游可见：引擎把最后一轮的体内结果并入父层，
+    // 因此「体内节点 → …→ loop → done 分支」这条引用是合法的
+    for (const scope of scopeByLoopId.values()) {
+      if (seen.has(scope.loopId)) {
+        for (const member of scope.scopeNodeIds) seen.add(member)
+      }
     }
     return seen
   }

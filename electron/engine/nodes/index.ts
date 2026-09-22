@@ -14,6 +14,7 @@ import { execute as fileIoExec } from './actions/file-io'
 // ---------- 逻辑 ----------
 import { execute as conditionExec } from './logic/condition'
 import { execute as loopExec } from './logic/loop'
+import { execute as loopEndExec } from './logic/loop-end'
 import { execute as variableSetExec } from './logic/variable-set'
 import { execute as subWorkflowExec } from './logic/sub-workflow'
 
@@ -39,6 +40,7 @@ const executors: Record<string, NodeExecuteFn> = {
   'file-io': fileIoExec,
   'condition': conditionExec,
   'loop': loopExec,
+  'loop-end': loopEndExec,
   'variable-set': variableSetExec,
   'sub-workflow': subWorkflowExec,
   'llm-call': llmCallExec,

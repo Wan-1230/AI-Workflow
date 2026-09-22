@@ -44,6 +44,21 @@ export class Executor {
   }
 
   /**
+   * 单字段插值。
+   * 供引擎在注册表之外执行的节点（sub-workflow）复用同一套解析规则：
+   * 这类节点的 config 不会经过 executeNode，不显式解析就会把 `{{...}}` 原样传下去。
+   */
+  resolveField(
+    value: string,
+    context: ExecutionContext,
+    inputs: Record<string, unknown>,
+    nodeId: string,
+    fieldKey: string
+  ): string {
+    return this.resolveString(value, context, inputs, nodeId, fieldKey)
+  }
+
+  /**
    * 带重试的执行逻辑
    */
   private async executeWithRetry(
@@ -124,6 +139,7 @@ export class Executor {
       variables: context.variables,
       models: context.models,
       signal: attempt.signal as AbortSignal,
+      scope: context.scope,
       logger: (msg: string) => context.logger(node.id, msg),
       stream: context.stream
         ? (chunk: Parameters<NonNullable<typeof context.stream>>[0]) => {
@@ -249,6 +265,40 @@ export class Executor {
         return typeof resolved === 'object' && resolved !== null
           ? JSON.stringify(resolved)
           : String(resolved)
+      }
+
+      // 0.5 循环体作用域：{{item}} / {{index}} / {{count}} 与 {{<loopId>.item}} 等
+      const scope = context.scope
+      if (scope) {
+        const pick = (key: string, rest: string): unknown => {
+          const base = key === 'item' ? scope.item : key === 'index' ? scope.index : scope.count
+          return rest ? this.getNestedValue(base as Record<string, unknown>, rest) : base
+        }
+
+        let value: unknown
+        let matched = false
+
+        if (trimmed === 'item' || trimmed.startsWith('item.')) {
+          value = pick('item', trimmed.slice(5)); matched = true
+        } else if (trimmed === 'index') {
+          value = scope.index; matched = true
+        } else if (trimmed === 'count') {
+          value = scope.count; matched = true
+        } else if (scope.loopId && trimmed.startsWith(`${scope.loopId}.`)) {
+          const sub = trimmed.slice(scope.loopId.length + 1)
+          if (sub === 'item' || sub.startsWith('item.')) {
+            value = pick('item', sub.slice(5)); matched = true
+          } else if (sub === 'index' || sub === 'count') {
+            value = pick(sub, ''); matched = true
+          }
+        }
+
+        if (matched) {
+          if (value === undefined) {
+            throw new Error(`无法解析引用 {{${trimmed}}}（${label}）：当前循环项没有该字段`)
+          }
+          return typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)
+        }
       }
 
       // 1. 全局变量引用: {{global.KEY}}（variable-set 节点写入，跨节点传递）

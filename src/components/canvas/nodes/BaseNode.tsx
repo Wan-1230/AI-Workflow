@@ -118,8 +118,8 @@ function BaseNodeComponent({ id, data, selected }: NodeProps) {
               className="!w-2.5 !h-2.5 !bg-sig-green !border-2 !border-surface" style={{ left: '30%' }} />
             <Handle type="source" position={Position.Bottom} id={branchHandles![1]}
               className="!w-2.5 !h-2.5 !bg-sig-red !border-2 !border-surface" style={{ left: '70%' }} />
-            <span className="absolute -bottom-4 left-[22%] text-2xs text-sig-green font-mono font-bold">T</span>
-            <span className="absolute -bottom-4 left-[63%] text-2xs text-sig-red font-mono font-bold">F</span>
+            <span className="absolute -bottom-4 left-[22%] text-2xs text-sig-green font-mono font-bold">{branchHandles![0]}</span>
+            <span className="absolute -bottom-4 left-[63%] text-2xs text-sig-red font-mono font-bold">{branchHandles![1]}</span>
           </>
         ) : (
           <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-fg-faint !border-2 !border-surface" />

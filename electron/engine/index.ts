@@ -1,5 +1,18 @@
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, ExecutionEvent, NodeResult, StreamChunk } from '@shared/workflow'
 import type { LlmModelInfo } from '@shared/node'
+import { analyzeLoopScopes, type LoopScope } from '@shared/loop-scopes'
+import { resolveLoopItems } from './nodes/logic/loop'
+
+/** 单次循环允许的最大项数：逐项执行是串行的，无上限会静默拖死一次运行 */
+const MAX_LOOP_ITEMS = 500
+
+/** 循环体作用域：注入到体内节点的插值上下文 */
+export interface LoopScopeVars {
+  item?: unknown
+  index?: number
+  count?: number
+  loopId?: string
+}
 import { parseWorkflow } from './parser'
 import { Scheduler } from './scheduler'
 import { Executor } from './executor'
@@ -67,15 +80,30 @@ export class WorkflowEngine {
     secrets: Record<string, string>,
     models?: LlmModelInfo[],
     /** 父级变量空间（子工作流共享引用，变量跨层传递） */
-    parentVariables?: Record<string, string>
+    parentVariables?: Record<string, string>,
+    /** 循环体作用域；仅由 executeLoop 驱动的节点携带 */
+    scope?: LoopScopeVars
   ): Promise<Map<string, NodeResult>> {
     const signal = abortController.signal
 
     // 1. 解析工作流
     const parsed = parseWorkflow(wf)
 
+    // 1.5 循环作用域：循环体内的节点不参与本层调度，改由对应 loop 逐项驱动。
+    // 结构非法在此抛出 —— 校验器已在入口拦过一层，这里是防绕过的第二道。
+    const analysis = analyzeLoopScopes(parsed.nodes, wf.edges)
+    if (analysis.problems.length) {
+      throw new Error(`工作流结构不合法：${analysis.problems.map(p => p.message).join('；')}`)
+    }
+
+    const loopScopes = new Map(analysis.scopes.map(s => [s.loopId, s]))
+    const outerNodes = parsed.nodes.filter(n => !analysis.bodyNodeIds.has(n.id))
+    const outerEdges = wf.edges.filter(
+      e => !analysis.bodyNodeIds.has(e.source) && !analysis.bodyNodeIds.has(e.target)
+    )
+
     // 2. 拓扑排序 + 并行分组
-    const parallelGroups = this.scheduler.getParallelGroups(parsed.nodes, wf.edges)
+    const parallelGroups = this.scheduler.getParallelGroups(outerNodes, outerEdges)
 
     // 3. 存储节点执行结果
     const nodeResults = new Map<string, NodeResult>()
@@ -113,13 +141,13 @@ export class WorkflowEngine {
 
       // 并行执行同组节点
       const promises = activeInGroup.map(nodeId =>
-        this.executeSingleNode(nodeId, parsed.nodes, wf, nodeResults, activeNodes, onEvent, abortController, secrets, models, variables, stream)
+        this.executeSingleNode(nodeId, outerNodes, outerEdges, wf, nodeResults, activeNodes, onEvent, abortController, secrets, models, variables, stream, loopScopes, scope)
       )
 
       await Promise.allSettled(promises)
 
       // 失败处置：按各节点声明的 onError 策略分流，而非一律中断
-      if (this.applyErrorStrategies(activeInGroup, parsed.nodes, wf.edges, nodeResults, activeNodes, onEvent)) {
+      if (this.applyErrorStrategies(activeInGroup, outerNodes, outerEdges, nodeResults, activeNodes, onEvent)) {
         haltedByError = true
         break
       }
@@ -130,8 +158,9 @@ export class WorkflowEngine {
       this.emitCancelled(onEvent, activeNodes, nodeResults)
     } else {
       // 未被激活的节点（分支未命中、或上游按 skip 跳过）补为 skipped，
-      // 否则它们既不报错也不产出结果，界面与历史里都是悬空状态
-      this.materializeSkipped(parsed.nodes, nodeResults, onEvent)
+      // 否则它们既不报错也不产出结果，界面与历史里都是悬空状态。
+      // 只看本层节点：循环体内节点由 executeLoop 逐轮写入，不在这里补写
+      this.materializeSkipped(outerNodes, nodeResults, onEvent)
     }
 
     // 7. 工作流终态
@@ -154,6 +183,7 @@ export class WorkflowEngine {
   private async executeSingleNode(
     nodeId: string,
     nodes: WorkflowNode[],
+    edges: WorkflowEdge[],
     wf: WorkflowDefinition,
     nodeResults: Map<string, NodeResult>,
     activeNodes: Set<string>,
@@ -162,7 +192,9 @@ export class WorkflowEngine {
     secrets: Record<string, string>,
     models?: LlmModelInfo[],
     variables?: Record<string, string>,
-    stream?: (chunk: StreamChunk) => void
+    stream?: (chunk: StreamChunk) => void,
+    loopScopes?: Map<string, LoopScope>,
+    scope?: LoopScopeVars
   ): Promise<void> {
     const node = nodes.find(n => n.id === nodeId)
     if (!node) return
@@ -177,7 +209,7 @@ export class WorkflowEngine {
     try {
       // 收集上游节点的输出作为输入
       const inputs: Record<string, unknown> = {}
-      const incomingEdges = wf.edges.filter(e => e.target === nodeId)
+      const incomingEdges = edges.filter(e => e.target === nodeId)
       for (const edge of incomingEdges) {
         const upstreamResult = nodeResults.get(edge.source)
         if (upstreamResult && upstreamResult.status === 'success') {
@@ -186,10 +218,21 @@ export class WorkflowEngine {
       }
 
       let output: Record<string, unknown>
+      let iterations: NodeResult[][] | undefined
 
-      // 子工作流节点：由引擎递归执行（不经过注册表）
-      if (node.type === 'sub-workflow') {
-        output = await this.executeSubWorkflow(node, inputs, onEvent, abortController, secrets, models, variables, stream)
+      // 循环节点（新式：画布上有循环体）：由引擎逐项驱动循环体子图
+      const loopScope = node.type === 'loop' ? loopScopes?.get(node.id) : undefined
+      if (loopScope) {
+        const r = await this.executeLoop(
+          node, loopScope, wf, nodeResults, onEvent, abortController, secrets, models, variables
+        )
+        output = r.output
+        iterations = r.iterations
+      } else if (node.type === 'sub-workflow') {
+        // 子工作流节点：由引擎递归执行（不经过注册表）
+        output = await this.executeSubWorkflow(node, {
+          inputs, wf, nodeResults, onEvent, abortController, secrets, models, variables, stream, scope
+        })
       } else {
         // 执行节点（带超时和重试）
         output = await this.executor.executeNode(node, {
@@ -200,6 +243,7 @@ export class WorkflowEngine {
           models,
           signal: abortController.signal,
           stream,
+          scope,
           logger: (nid, msg) => {
             onEvent({ type: 'node:log', nodeId: nid, data: { message: msg }, timestamp: Date.now() })
           }
@@ -210,7 +254,8 @@ export class WorkflowEngine {
         nodeId,
         status: 'success',
         output,
-        duration: Date.now() - startTime
+        duration: Date.now() - startTime,
+        ...(iterations ? { iterations } : {})
       }
       nodeResults.set(nodeId, result)
 
@@ -219,7 +264,7 @@ export class WorkflowEngine {
 
       // 条件分支路由：根据输出 branch 停用非选中路径
       if (node.type === 'condition' && output.branch) {
-        this.routeBranch(nodeId, String(output.branch), wf.edges, activeNodes)
+        this.routeBranch(nodeId, String(output.branch), edges, activeNodes)
       }
     } catch (err: unknown) {
       if (abortController.signal.aborted) return // 取消导致的错误不记录
@@ -243,16 +288,130 @@ export class WorkflowEngine {
    * 解析内嵌 workflowJson，递归调用 runWorkflow（共享取消控制器，父级取消自动传导）；
    * 子工作流内部事件仅转发节点级事件（避免重复 workflow:* 终态干扰前端）
    */
-  private async executeSubWorkflow(
-    node: { id: string; type: string; config: Record<string, unknown> },
-    inputs: Record<string, unknown>,
+  /**
+   * 逐项执行画布上的循环体。
+   *
+   * 每轮把 body 子图当作一个内部工作流跑一次，复用同一套中止、错误策略与事件流
+   * （嵌套循环因此天然成立：内层 loop 只是外层体内一个普通节点）。
+   * 体内节点结果按轮覆盖，使 {{bodyNode.field}} 读到的是当前轮的值；
+   * 全部轮次留档在 iterations 里，供历史逐轮回看。
+   */
+  private async executeLoop(
+    loopNode: WorkflowNode,
+    scope: LoopScope,
+    wf: WorkflowDefinition,
+    parentResults: Map<string, NodeResult>,
     onEvent: (event: ExecutionEvent) => void,
     abortController: AbortController,
     secrets: Record<string, string>,
     models?: LlmModelInfo[],
-    variables?: Record<string, string>,
-    _stream?: (chunk: StreamChunk) => void
+    variables?: Record<string, string>
+  ): Promise<{ output: Record<string, unknown>; iterations: NodeResult[][] }> {
+    const log = (msg: string): void => {
+      onEvent({ type: 'node:log', nodeId: loopNode.id, data: { message: msg }, timestamp: Date.now() })
+    }
+
+    // 解析数组来源：上游输出按 done/body 之外的入边收集
+    const inputs: Record<string, unknown> = {}
+    for (const e of wf.edges.filter(x => x.target === loopNode.id)) {
+      const up = parentResults.get(e.source)
+      if (up?.status === 'success') inputs[e.source] = up.output
+    }
+
+    const items = resolveLoopItems(loopNode.config, inputs, log)
+    if (items.length === 0) {
+      return { output: { results: [], count: 0, items: [] }, iterations: [] }
+    }
+    if (items.length > MAX_LOOP_ITEMS) {
+      throw new Error(`循环项数 ${items.length} 超过上限 ${MAX_LOOP_ITEMS}，请缩小输入范围或改用批处理`)
+    }
+
+    // 用传递闭包：内层循环的体与终点必须一起进来，否则嵌套会静默退化
+    const bodyIds = new Set<string>(scope.scopeNodeIds)
+    const innerNodes = wf.nodes.filter(n => bodyIds.has(n.id))
+    const innerEdges = wf.edges.filter(e => bodyIds.has(e.source) && bodyIds.has(e.target))
+    const sharedVariables = variables ?? {}
+
+    const iterations: NodeResult[][] = []
+    const results: unknown[] = []
+
+    for (let i = 0; i < items.length; i++) {
+      if (abortController.signal.aborted) throw new Error('执行已取消')
+
+      const roundWf: WorkflowDefinition = {
+        ...wf,
+        id: `${wf.id}#${loopNode.id}#${i}`,
+        name: `${wf.name} · 循环体`,
+        nodes: innerNodes,
+        edges: innerEdges,
+        variables: []
+      }
+
+      // 内层的 workflow:* 终态不外泄：一轮体跑完不等于整个运行跑完，
+      // 直接透传会让运行面板先红后绿。
+      const roundResults = await this.runWorkflow(
+        roundWf,
+        evt => { if (evt.type.startsWith('node:')) onEvent(evt) },
+        abortController,
+        secrets,
+        models,
+        sharedVariables,
+        { item: items[i], index: i, count: items.length, loopId: loopNode.id }
+      )
+
+      const list = [...roundResults.values()]
+
+      // 体内节点按 stop 策略失败时，内层运行会带着一堆 error 收尾，
+      // 循环若照常进入下一轮，就等于把失败吞成了「跑完了，只是结果不对」。
+      // error-branch 与 skip 另有归宿，不算中止。
+      const halted = list.find(r =>
+        r.status === 'error'
+        && (innerNodes.find(n => n.id === r.nodeId)?.executionConfig?.onError ?? 'stop') === 'stop')
+      if (halted) {
+        throw new Error(`循环体第 ${i + 1}/${items.length} 项在 ${halted.nodeId} 失败：${halted.error || '未知错误'}`)
+      }
+      iterations.push(list)
+      // 每轮留一份「节点 → 输出」的快照，循环自身因此可被下游汇总引用
+      results.push(Object.fromEntries(list.map(r => [r.nodeId, r.output])))
+
+      log(`迭代 ${i + 1}/${items.length} 完成`)
+    }
+
+    // 把最后一轮结果并入父层，使 done 出口的下游能引用体内节点输出
+    for (const r of iterations.at(-1) ?? []) parentResults.set(r.nodeId, r)
+
+    return {
+      output: {
+        results,
+        count: items.length,
+        items,
+        item: items[items.length - 1],
+        index: items.length - 1
+      },
+      iterations
+    }
+  }
+
+  /**
+   * 执行子工作流（JSON 内嵌式）
+   */
+  private async executeSubWorkflow(
+    node: { id: string; type: string; config: Record<string, unknown> },
+    args: {
+      inputs: Record<string, unknown>
+      wf: WorkflowDefinition
+      nodeResults: Map<string, NodeResult>
+      onEvent: (event: ExecutionEvent) => void
+      abortController: AbortController
+      secrets: Record<string, string>
+      models?: LlmModelInfo[]
+      variables?: Record<string, string>
+      stream?: (chunk: StreamChunk) => void
+      scope?: LoopScopeVars
+    }
   ): Promise<Record<string, unknown>> {
+    const { inputs, wf, nodeResults, onEvent, abortController, secrets, models, stream, scope } = args
+    const variables = args.variables ?? {}
     const signal = abortController.signal
     const rawJson = String(node.config.workflowJson || '').trim()
     if (!rawJson) throw new Error('子工作流未配置：请在节点配置中粘贴子工作流 JSON')
@@ -267,10 +426,27 @@ export class WorkflowEngine {
       throw new Error('子工作流 JSON 缺少 nodes 数组')
     }
 
-    // 子工作流输入注入为全局变量（sub_input 前缀），子流程内可用 {{global.sub_input}} 引用
-    if (inputs && Object.keys(inputs).length > 0 && variables) {
-      variables['sub_input'] = JSON.stringify(inputs)
-    }
+    // 子工作流入口数据：优先 config.input（走注册表的节点由执行器插值，这个分支不经过，
+    // 需自己解析），未填时退回上游输出聚合。子流程内以 {{global.sub_input}} 引用。
+    const declared = typeof node.config.input === 'string' ? node.config.input.trim() : ''
+    const subInput = declared
+      ? this.executor.resolveField(declared, {
+          workflow: wf,
+          nodeResults,
+          secrets,
+          variables,
+          models,
+          signal,
+          stream,
+          scope,
+          logger: (nid, msg) => {
+            onEvent({ type: 'node:log', nodeId: nid, data: { message: msg }, timestamp: Date.now() })
+          }
+        }, inputs, node.id, 'input')
+      : Object.keys(inputs).length
+        ? JSON.stringify(inputs)
+        : ''
+    if (subInput) variables['sub_input'] = subInput
 
     const startedAt = Date.now()
 

@@ -70,6 +70,8 @@ export interface ExecutionContext {
   logger: (nodeId: string, msg: string) => void
   /** 流式输出回调（LLM 节点调用） */
   stream?: (chunk: StreamChunk) => void
+  /** 循环体作用域（仅循环体内节点的执行上下文携带） */
+  scope?: { item?: unknown; index?: number; count?: number; loopId?: string }
 }
 
 export interface NodeResult {

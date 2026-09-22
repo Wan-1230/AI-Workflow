@@ -15,11 +15,19 @@ import type { WorkflowNode, WorkflowEdge } from '@shared/workflow'
 
 export interface LoopScope {
   loopId: string
-  /** 循环体内的节点 id（不含 loop 自身与 loop-end） */
+  /** 直接属于本循环体的节点 id（不含 loop 自身与 loop-end），用于结构校验 */
   bodyNodeIds: string[]
   endId: string
   /** 嵌套在本循环体内的内层 loop id */
   nestedLoopIds: string[]
+  /**
+   * 传递闭包：直接体内节点 + 本循环的 end + 所有内层循环的体与终点。
+   *
+   * 必须区分于 bodyNodeIds —— 内层节点归属于内层循环，若外层按直接归属构造
+   * 逐项子图，内层的体与终点会被整个丢掉，内层循环随即退化成"只渲染模板"，
+   * 表现为嵌套循环静默不执行任何迭代。
+   */
+  scopeNodeIds: string[]
 }
 
 export type ScopeProblemKind =
@@ -270,15 +278,39 @@ export function analyzeLoopScopes(
       loopId: loop.id,
       bodyNodeIds: [...body],
       endId,
-      nestedLoopIds: nested
+      nestedLoopIds: nested,
+      // 传递闭包在所有 scope 建好后统一计算（此处先占位）
+      scopeNodeIds: []
     })
+  }
+
+  // 传递闭包：把内层循环的体与终点并入外层作用域，供调度排除与子图构造使用
+  const byLoop = new Map(scopes.map(s => [s.loopId, s]))
+  const transitivelyOwned = (scope: LoopScope, guard: Set<string>): string[] => {
+    const acc = [...scope.bodyNodeIds, scope.endId]
+    for (const nestedId of scope.nestedLoopIds) {
+      if (guard.has(nestedId)) continue
+      guard.add(nestedId)
+      const nested = byLoop.get(nestedId)
+      if (nested) acc.push(...transitivelyOwned(nested, guard))
+    }
+    return [...new Set(acc)]
+  }
+
+  for (const scope of scopes) {
+    scope.scopeNodeIds = transitivelyOwned(scope, new Set([scope.loopId]))
+  }
+
+  const allBody = new Set<string>()
+  for (const scope of scopes) {
+    for (const id of scope.scopeNodeIds) allBody.add(id)
   }
 
   return {
     scopes,
     problems,
     ownerOf,
-    bodyNodeIds: new Set(ownerOf.keys())
+    bodyNodeIds: allBody
   }
 }
 

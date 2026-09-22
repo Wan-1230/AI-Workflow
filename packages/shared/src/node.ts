@@ -76,6 +76,11 @@ export interface NodeContext {
   logger: (msg: string) => void
   /** 流式输出回调（LLM 节点推送增量） */
   stream?: (chunk: StreamChunk) => void
+  /**
+   * 循环体作用域：仅当节点位于某个 loop 的循环体内、且正处于某一轮迭代时存在。
+   * 让体内任意节点（不只是模板类节点）都能取到当前项。
+   */
+  scope?: { item?: unknown; index?: number; count?: number; loopId?: string }
 }
 
 export type NodeExecuteFn = (ctx: NodeContext) => Promise<Record<string, unknown>>

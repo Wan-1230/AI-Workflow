@@ -210,7 +210,7 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
     id: 'loop',
     category: 'logic',
     displayName: '循环',
-    description: '对数组逐项渲染模板，输出结果数组',
+    description: '对数组逐项执行画布上的循环体（连到 loop-end 为止）',
     icon: '🔁',
     color: '#FF7D00',
     defaultConfig: {
@@ -222,13 +222,33 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
     fields: [
       { key: 'itemsSource', label: '数组来源', type: 'text', help: '上游节点输出引用，解析后须为数组，如 {{http.data.items}}' },
       { key: 'items', label: '或直接填数组 (JSON)', type: 'json' },
-      { key: 'template', nodeRefInterpolation: false, label: '每项模板', type: 'textarea', rows: 4, help: '支持 {{item}} / {{item.field}} / {{index}} / {{count}}' },
-      { key: 'mode', label: '处理方式', type: 'select', options: [{ value: 'template', label: '模板渲染' }] }
+      // 旧式兼容：没有画布循环体（未接 loop-end）时，退回"逐项渲染模板"的老语义。
+      // 必须仍声明为字段，否则执行器不会跳过其插值，{{item}} 会被当作节点引用而报错。
+      { key: 'template', nodeRefInterpolation: false, label: '每项模板（旧式，无循环体时生效）', type: 'textarea', rows: 4, help: '支持 {{item}} / {{item.field}} / {{index}} / {{count}}' },
+      { key: 'mode', label: '处理方式（旧式）', type: 'select', options: [{ value: 'template', label: '模板渲染' }] }
     ],
+    // body：每个数组项进入一次；done：全部迭代结束后走一次
+    sourceHandles: ['body', 'done'],
     outputs: [
       { name: 'results', label: '逐项结果数组', type: 'any[]' },
       { name: 'count', label: '循环次数', type: 'number' },
-      { name: 'items', label: '原始数组', type: 'any[]' }
+      { name: 'items', label: '原始数组', type: 'any[]' },
+      // 循环体内可按 {{<loopId>.item}} / {{<loopId>.index}} 取当前迭代上下文
+      { name: 'item', label: '当前项（体内作用域）', type: 'any' },
+      { name: 'index', label: '当前序号（体内作用域）', type: 'number' }
+    ]
+  },
+  'loop-end': {
+    id: 'loop-end',
+    category: 'logic',
+    displayName: '循环结束',
+    description: '标记循环体的终点；循环后的续行请接回循环节点的 done 出口',
+    icon: '🏁',
+    color: '#FF7D00',
+    defaultConfig: {},
+    fields: [],
+    outputs: [
+      { name: 'passed', label: '本轮完成的迭代序号', type: 'number' }
     ]
   },
   'variable-set': {
@@ -263,7 +283,7 @@ export const nodeCatalog: Record<string, NodeDefinition> = {
       input: ''
     },
     fields: [
-      { key: 'workflowJson', label: '子工作流 JSON', type: 'textarea', rows: 12, help: '粘贴完整工作流 JSON（与导出格式一致）' },
+      { key: 'workflowJson', label: '子工作流 JSON', type: 'textarea', rows: 12, nodeRefInterpolation: false, help: '粘贴完整工作流 JSON（与导出格式一致）；其中的 {{...}} 由子流程自己解释，不按父图解析' },
       { key: 'input', label: '输入数据', type: 'text', help: '可选，子流程内可用 {{global.sub_input}} 引用' }
     ],
     outputs: [

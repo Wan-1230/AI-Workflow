@@ -2,17 +2,17 @@ import type { NodeContext, NodeExecuteFn } from '@shared/node'
 
 
 /**
- * 循环节点：对输入数组逐项执行模板渲染
- * - itemsSource：上游节点输出引用（如 {{http.data}}），解析后须为数组
- * - template：每项渲染模板，支持 {{item}} / {{item.field}} / {{index}} / {{count}}
- * - 输出 results 数组供下游使用，或配合 {{loopNode.results[i]}} 访问单项
+ * 解析循环的数组来源。
+ *
+ * 导出给引擎的新式逐项执行复用，避免"配置怎么变成一个数组"这件事存在两份实现。
+ * 两条入口此前被写成互斥分支：只填 config.items 时 itemsSource 为空，整段解析被跳过，
+ * 于是循环静默产出 0 项且状态为 success。现改为按优先级依次尝试。
  */
-export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
-  const config = ctx.config
-
-  // 解析数组来源。两条入口此前被写成互斥分支：只填 config.items（目录里明写的
-  // 「或直接填数组 (JSON)」）时 itemsSource 为空，整段解析被跳过，
-  // 于是循环静默产出 0 项且状态为 success。现改为按优先级依次尝试。
+export function resolveLoopItems(
+  config: Record<string, unknown>,
+  inputs: Record<string, unknown>,
+  logger: (msg: string) => void
+): unknown[] {
   let items: unknown[] = []
   const raw = config.items
 
@@ -22,9 +22,9 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
     try {
       const parsed: unknown = JSON.parse(raw)
       if (Array.isArray(parsed)) items = parsed
-      else ctx.logger('config.items 不是 JSON 数组，已忽略')
+      else logger('config.items 不是 JSON 数组，已忽略')
     } catch {
-      ctx.logger('config.items 不是合法 JSON，已忽略')
+      logger('config.items 不是合法 JSON，已忽略')
     }
   }
 
@@ -32,7 +32,7 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
     // itemsSource 形如 {{nodeId.data}}，executor 已完成插值
     const source = String(config.itemsSource)
     const key = source.replace(/^\{\{|\}\}$/g, '')
-    const fromInputs = ctx.inputs[key] ?? ctx.inputs[Object.keys(ctx.inputs)[0]]
+    const fromInputs = inputs[key] ?? inputs[Object.keys(inputs)[0]]
 
     if (Array.isArray(fromInputs)) {
       items = fromInputs
@@ -41,12 +41,27 @@ export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
         const parsed: unknown = JSON.parse(fromInputs)
         if (Array.isArray(parsed)) items = parsed
       } catch { /* 非 JSON，交由下方空结果分支处理 */ }
+    } else if (fromInputs && typeof fromInputs === 'object') {
+      // 插值结果可能是已解析的对象：单值按一项处理，避免"看着有数据却循环 0 次"
+      items = [fromInputs]
     }
 
     if (items.length === 0 && fromInputs !== undefined && source !== '{{input}}') {
-      ctx.logger(`itemsSource "${source}" 未解析出数组，循环将不执行任何迭代`)
+      logger(`itemsSource "${source}" 未解析出数组，循环将不执行任何迭代`)
     }
   }
+
+  return items
+}
+
+/**
+ * 旧式循环节点：画布上没有循环体时引擎才会走到这里，等价于"逐项渲染模板"。
+ * 有循环体时由 `engine/index.ts#executeLoop` 逐项驱动子图，本函数不参与。
+ */
+export const execute: NodeExecuteFn = async (ctx: NodeContext) => {
+  const config = ctx.config
+
+  const items = resolveLoopItems(config, ctx.inputs, msg => ctx.logger(msg))
 
   if (items.length === 0) {
     ctx.logger('循环输入为空数组，输出空结果')

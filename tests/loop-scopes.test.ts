@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { analyzeLoopScopes, isLegacyTemplateLoop } from '../electron/engine/graph/scopes'
+import { analyzeLoopScopes, isLegacyTemplateLoop } from '@shared/loop-scopes'
 import type { WorkflowEdge, WorkflowNode } from '@shared/workflow'
 
 function n(id: string, type: string, config: Record<string, unknown> = {}): WorkflowNode {
