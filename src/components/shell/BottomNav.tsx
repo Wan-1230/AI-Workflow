@@ -1,6 +1,7 @@
 import { Home, Workflow, Cpu, FileText, ScrollText, Settings } from 'lucide-react'
 import { Tabs, type TabItem } from '../ui/Tabs'
 import { useAppStore, type AppView } from '../../stores/app-store'
+import { useShallow } from 'zustand/react/shallow'
 import { toast } from '../../stores/toast-store'
 
 /**
@@ -8,7 +9,7 @@ import { toast } from '../../stores/toast-store'
  * 编辑器 Tab 需先打开项目
  */
 export function BottomNav() {
-  const { view, setView, currentProject } = useAppStore()
+  const { view, setView, currentProject } = useAppStore(useShallow(s => ({ view: s.view, setView: s.setView, currentProject: s.currentProject })))
 
   const items: TabItem<AppView>[] = [
     { value: 'home', label: '首页', icon: <Home size={16} /> },

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, Trash2, Info } from 'lucide-react'
 import { Modal, Button, IconButton, Input } from '../ui'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useShallow } from 'zustand/react/shallow'
 import type { GlobalVariable } from '@shared/workflow'
 
 /**
@@ -9,7 +10,7 @@ import type { GlobalVariable } from '@shared/workflow'
  * 变量在节点配置中通过 {{global.KEY}} 引用，跨节点共享
  */
 export function GlobalVariablesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { variables, setVariables } = useWorkflowStore()
+  const { variables, setVariables } = useWorkflowStore(useShallow(s => ({ variables: s.variables, setVariables: s.setVariables })))
   const [draft, setDraft] = useState<GlobalVariable[]>([])
 
   // 打开时同步草稿

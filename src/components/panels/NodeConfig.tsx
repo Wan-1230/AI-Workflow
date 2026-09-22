@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Trash2, Settings2, Variable, ChevronDown, ChevronRight } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useShallow } from 'zustand/react/shallow'
 import { nodeCatalog, type NodeFieldSchema } from '@shared/node-catalog'
 import type { NodeErrorStrategy, NodeExecutionConfig } from '@shared/workflow'
 import { Input, Textarea, Select, Switch, IconButton, Spinner } from '../../components/ui'
@@ -16,7 +17,11 @@ export function NodeConfig() {
   const {
     nodes, selectedNodeId, updateNodeData, updateNodeConfig,
     updateNodeExecutionConfig, removeNode
-  } = useWorkflowStore()
+  } = useWorkflowStore(useShallow(s => ({
+    nodes: s.nodes, selectedNodeId: s.selectedNodeId, updateNodeData: s.updateNodeData,
+    updateNodeConfig: s.updateNodeConfig, updateNodeExecutionConfig: s.updateNodeExecutionConfig,
+    removeNode: s.removeNode
+  })))
   const selectedNode = nodes.find(n => n.id === selectedNodeId)
   const def = selectedNode ? nodeCatalog[selectedNode.data.nodeType as string] : null
 
@@ -251,7 +256,7 @@ function SchemaField({
    变量引用：列出上游节点可引用字段，点击插入
    ===================================================================== */
 function VariableReferences({ nodeId, onPick }: { nodeId: string; onPick: (expr: string) => void }) {
-  const { nodes, edges } = useWorkflowStore()
+  const { nodes, edges } = useWorkflowStore(useShallow(s => ({ nodes: s.nodes, edges: s.edges })))
   const [open, setOpen] = useState(false)
 
   // 收集直接上游节点

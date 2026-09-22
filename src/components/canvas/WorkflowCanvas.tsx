@@ -10,6 +10,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { BaseNode } from './nodes/BaseNode'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useShallow } from 'zustand/react/shallow'
 import { nodeCatalog } from '@shared/node-catalog'
 
 const nodeTypes = { baseNode: BaseNode }
@@ -24,7 +25,13 @@ const nodeTypes = { baseNode: BaseNode }
  *  - Ctrl/Cmd+L 自动布局
  */
 export function WorkflowCanvas() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode } = useWorkflowStore()
+    // 画布只关心图数据与动作；订阅整个 store 会让每个运行事件重渲染 ReactFlow
+    const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, selectNode } = useWorkflowStore(
+      useShallow(s => ({
+        nodes: s.nodes, edges: s.edges, onNodesChange: s.onNodesChange, onEdgesChange: s.onEdgesChange,
+        onConnect: s.onConnect, addNode: s.addNode, selectNode: s.selectNode
+      }))
+    )
   const wrapper = useRef<HTMLDivElement>(null)
   const rf = useReactFlow()
 

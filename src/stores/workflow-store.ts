@@ -12,6 +12,9 @@ import {
 } from '@xyflow/react'
 import { v4 as uuid } from 'uuid'
 import { nodeCatalog } from '@shared/node-catalog'
+import { type LogLine } from './log-buffer'
+import { reduceEvent, emptyStatuses, type ExecutionSnapshot, type RuntimeEvent } from './execution-events'
+import { createStreamQueue, rafSchedule } from './stream-queue'
 import { useAppStore } from './app-store'
 import { toast } from './toast-store'
 import type { GlobalVariable, NodeExecutionConfig, WorkflowDefinition } from '@shared/workflow'
@@ -22,8 +25,10 @@ export type ExecutionPhase = 'idle' | 'running' | 'completed' | 'error' | 'cance
 export interface ExecutionState {
   status: ExecutionPhase
   nodeStatuses: Record<string, ExecutionStatus>
-  logs: { nodeId: string; message: string; timestamp: number; output?: Record<string, unknown> }[]
-  /** LLM 流式输出：nodeId → 累计文本 */
+  logs: LogLine[]
+  /** 因上限被丢弃的最旧日志行数；界面上要说明，否则用户以为运行没产生日志 */
+  droppedLogs: number
+  /** LLM 流式输出：nodeId -> 累计文本 */
   streamTexts: Record<string, string>
   /** 当前流式输出的节点 */
   streamingNodeId: string | null
@@ -38,6 +43,7 @@ const IDLE_EXECUTION: ExecutionState = {
   status: 'idle',
   nodeStatuses: {},
   logs: [],
+  droppedLogs: 0,
   streamTexts: {},
   streamingNodeId: null,
   startedAt: null,
@@ -97,7 +103,7 @@ interface WorkflowStore {
   // 撤销/重做
   undo: () => void
   redo: () => void
-  pushHistory: () => void
+  pushHistory: (opts?: { mergeKey?: string }) => void
 
   // 复制/粘贴
   copySelection: () => void
@@ -119,10 +125,6 @@ interface WorkflowStore {
   execute: () => Promise<void>
   cancelExecution: () => Promise<void>
   resetExecution: () => void
-  addLog: (nodeId: string, message: string, output?: Record<string, unknown>) => void
-  setNodeStatus: (nodeId: string, status: ExecutionStatus) => void
-  setStreamChunk: (nodeId: string, delta: string, full: string) => void
-  clearStream: (nodeId: string) => void
 
   // 序列化
   toWorkflowJSON: () => WorkflowDefinition
@@ -132,7 +134,35 @@ interface WorkflowStore {
   autoLayout: () => void
 }
 
+/** 历史条数上限；超出后丢最旧的一条 */
 const MAX_HISTORY = 60
+/** 同一目标的连续输入合并成一条历史的窗口 */
+const HISTORY_MERGE_WINDOW_MS = 600
+
+/** 最近一次带 mergeKey 的入栈；放 store 外是因为它不是可渲染状态 */
+const lastPushRef: { current: { mergeKey: string; at: number } | null } = { current: null }
+
+
+/** store 里的执行态与归约器快照之间的换算：日志缓冲以扁平字段暴露给组件 */
+function toSnapshot(e: ExecutionState): ExecutionSnapshot {
+  return {
+    nodeStatuses: e.nodeStatuses,
+    logBuffer: { lines: e.logs, dropped: e.droppedLogs },
+    streamTexts: e.streamTexts,
+    streamingNodeId: e.streamingNodeId
+  }
+}
+
+function fromSnapshot(base: ExecutionState, snap: ExecutionSnapshot): ExecutionState {
+  return {
+    ...base,
+    nodeStatuses: snap.nodeStatuses,
+    logs: snap.logBuffer.lines,
+    droppedLogs: snap.logBuffer.dropped,
+    streamTexts: snap.streamTexts,
+    streamingNodeId: snap.streamingNodeId
+  }
+}
 
 function getDef(type: string) {
   return nodeCatalog[type]
@@ -204,6 +234,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
       )
     })
+    // 改提示词、改超时这类编辑此前完全不可撤销，而它恰恰是最常反悔的操作
+    const field = Object.keys(data)[0] || ''
+    get().pushHistory({ mergeKey: `${nodeId}:${field}` })
   },
 
   updateNodeConfig: (nodeId, config) => {
@@ -234,17 +267,41 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   // ===== 撤销/重做 =====
 
-  pushHistory: () => {
+  /**
+   * 记录一次可撤销的状态。
+   *
+   * mergeKey：同一目标的连续输入（如逐字改一条提示词）合并成一条历史，
+   * 否则打十个字要按十次 Ctrl+Z。窗口外的输入自然分叉成新的一条。
+   */
+  pushHistory: opts => {
     const { nodes, edges, history, historyIndex } = get()
-    // 忽略空画布快照的重复记录
     const snapshot: HistorySnapshot = {
       nodes: nodes.map(n => structuredClone(n)),
       edges: edges.map(e => structuredClone(e))
     }
     const trimmed = history.slice(0, historyIndex + 1)
     const last = trimmed[trimmed.length - 1]
+    const now = Date.now()
+    const lastPush = lastPushRef.current
+
+    if (
+      opts?.mergeKey &&
+      lastPush &&
+      lastPush.mergeKey === opts.mergeKey &&
+      now - lastPush.at < HISTORY_MERGE_WINDOW_MS &&
+      last
+    ) {
+      const merged = [...trimmed]
+      merged[merged.length - 1] = snapshot
+      lastPushRef.current = { mergeKey: opts.mergeKey, at: now }
+      set({ history: merged, historyIndex: merged.length - 1, canUndo: merged.length > 1, canRedo: false })
+      return
+    }
+
+    // 忽略重复记录（含空画布的连续快照）
     if (last && JSON.stringify(last) === JSON.stringify(snapshot)) return
     const next = [...trimmed, snapshot].slice(-MAX_HISTORY)
+    lastPushRef.current = opts?.mergeKey ? { mergeKey: opts.mergeKey, at: now } : null
     set({
       history: next,
       historyIndex: next.length - 1,
@@ -458,54 +515,53 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
     set({
       execution: {
+        ...IDLE_EXECUTION,
         status: 'running',
-        nodeStatuses: Object.fromEntries(state.nodes.map(n => [n.id, 'idle' as ExecutionStatus])),
-        logs: [],
-        streamTexts: {},
-        streamingNodeId: null,
+        nodeStatuses: emptyStatuses(state.nodes.map(n => n.id)),
         startedAt: Date.now(),
-        duration: null,
         executionId
       }
     })
 
     try {
-      const unsubscribe = window.api.onExecutionUpdate(event => {
-        const s = useWorkflowStore.getState()
-        if (event.type === 'node:start' && event.nodeId) {
-          s.setNodeStatus(event.nodeId, 'running')
-          s.addLog(event.nodeId, '开始执行...')
-        } else if (event.type === 'node:complete' && event.nodeId) {
-          s.setNodeStatus(event.nodeId, 'success')
-          s.addLog(event.nodeId, '执行成功', event.data as Record<string, unknown> | undefined)
-        } else if (event.type === 'node:error' && event.nodeId) {
-          s.setNodeStatus(event.nodeId, 'error')
-          const errMsg = String((event.data as { error?: string } | undefined)?.error || '未知错误')
-          s.addLog(event.nodeId, `执行失败: ${errMsg}`)
-        } else if (event.type === 'node:log' && event.nodeId) {
-          const msg = String((event.data as { message?: string } | undefined)?.message || '')
-          if (msg) s.addLog(event.nodeId, msg)
-        } else if (event.type === 'node:stream' && event.nodeId) {
-          const chunk = event.data as { delta?: string; full?: string; done?: boolean } | undefined
-          if (chunk?.full !== undefined) {
-            s.setStreamChunk(event.nodeId, chunk.delta || '', chunk.full)
+      // 事件不再逐个 set：归约成一份新执行态后提交一次。
+      // 流式增量单独走队列（每个 token 一次 set 会让整张画布每字重渲染）。
+      const streamQueue = createStreamQueue(updates => {
+        set(state => {
+          const snap = toSnapshot(state.execution)
+          const next: ExecutionSnapshot = { ...snap, streamTexts: { ...snap.streamTexts } }
+          for (const u of updates) {
+            if (u.done) {
+              if (next.streamingNodeId === u.nodeId) next.streamingNodeId = null
+            } else {
+              next.streamTexts[u.nodeId] = u.full
+              next.streamingNodeId = u.nodeId
+            }
           }
-          if (chunk?.done) s.clearStream(event.nodeId)
-        } else if (event.type === 'node:cancelled' && event.nodeId) {
-          s.setNodeStatus(event.nodeId, 'cancelled')
-          s.addLog(event.nodeId, '已取消')
-        } else if (event.type === 'node:skipped' && event.nodeId) {
-          // 分支未命中或按 skip 策略降级：必须落到终态，否则节点永久停在 running
-          s.setNodeStatus(event.nodeId, 'skipped')
-          const reason = (event.data as { error?: string } | undefined)?.error
-          s.addLog(event.nodeId, reason ? `已跳过：${reason}` : '已跳过')
+          return { execution: fromSnapshot(state.execution, next) }
+        })
+      }, rafSchedule)
+
+      const unsubscribe = window.api.onExecutionUpdate(event => {
+        if (event.type === 'node:stream' && event.nodeId) {
+          const chunk = event.data as { full?: string; done?: boolean } | undefined
+          if (chunk?.full !== undefined) {
+            streamQueue.push({ nodeId: event.nodeId, full: chunk.full, done: chunk.done })
+          }
+          return
         }
+        set(state => {
+          const next = reduceEvent(toSnapshot(state.execution), event as RuntimeEvent)
+          return next ? { execution: fromSnapshot(state.execution, next) } : {}
+        })
       })
 
       let result: Awaited<ReturnType<typeof window.api.executeWorkflow>>
       try {
         result = await window.api.executeWorkflow(wf, executionId)
       } finally {
+        // 最后一帧的流式文本必须在退订前结算，否则回答的尾巴会丢
+        streamQueue.flush()
         unsubscribe()
       }
 
@@ -561,43 +617,6 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   resetExecution: () => set({ execution: IDLE_EXECUTION }),
-
-  addLog: (nodeId, message, output) => {
-    set({
-      execution: {
-        ...get().execution,
-        logs: [...get().execution.logs, { nodeId, message, timestamp: Date.now(), output }]
-      }
-    })
-  },
-
-  setNodeStatus: (nodeId, status) => {
-    set({
-      execution: {
-        ...get().execution,
-        nodeStatuses: { ...get().execution.nodeStatuses, [nodeId]: status }
-      }
-    })
-  },
-
-  setStreamChunk: (nodeId, delta, full) => {
-    set({
-      execution: {
-        ...get().execution,
-        streamTexts: { ...get().execution.streamTexts, [nodeId]: full },
-        streamingNodeId: nodeId
-      }
-    })
-  },
-
-  clearStream: nodeId => {
-    set({
-      execution: {
-        ...get().execution,
-        streamingNodeId: get().execution.streamingNodeId === nodeId ? null : get().execution.streamingNodeId
-      }
-    })
-  },
 
   // ===== 序列化 =====
 

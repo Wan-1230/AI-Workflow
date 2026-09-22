@@ -4,23 +4,25 @@ import { nodeCategories, type NodeDefinition } from '@shared/node-catalog'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { toast } from '../../stores/toast-store'
 
-/** 可拖拽节点项：拖拽到画布创建 */
+/** 可拖拽节点项：拖到画布创建；键盘用户用 Enter/空格加到可视区中央 */
 function DragNode({ node }: { node: NodeDefinition }) {
+  const add = (): void => {
+    const { addNode } = useWorkflowStore.getState()
+    addNode(node.id, { x: 120 + Math.random() * 160, y: 120 + Math.random() * 120 })
+    toast.success(`已添加「${node.displayName}」`)
+  }
   return (
-    <div
+    <button
+      type="button"
+      onClick={add}
       draggable
       onDragStart={e => {
         e.dataTransfer.setData('application/reactflow-type', node.id)
         e.dataTransfer.effectAllowed = 'move'
       }}
-      onDoubleClick={() => {
-        const { addNode } = useWorkflowStore.getState()
-        addNode(node.id, { x: 120 + Math.random() * 160, y: 120 + Math.random() * 120 })
-        toast.success(`已添加「${node.displayName}」`)
-      }}
-      className="group flex items-start gap-2.5 px-3 py-2.5 rounded-lg cursor-grab active:cursor-grabbing
+      className="group w-full text-left flex items-start gap-2.5 px-3 py-2.5 rounded-lg cursor-grab active:cursor-grabbing
         hover:bg-overlay border border-transparent hover:border-line transition-all duration-fast"
-      title={`双击直接添加到画布：${node.description}`}
+      title={`点击或拖拽添加到画布：${node.description}`}
     >
       <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5 text-sm"
         style={{ backgroundColor: node.color + '14', color: node.color }}>
@@ -30,7 +32,7 @@ function DragNode({ node }: { node: NodeDefinition }) {
         <div className="text-xs font-medium text-fg leading-tight">{node.displayName}</div>
         <div className="text-2xs text-fg-muted mt-0.5 leading-tight line-clamp-2">{node.description}</div>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -59,6 +61,7 @@ export function NodePalette() {
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-faint" />
           <input
             type="text"
+            aria-label="搜索节点"
             value={q}
             onChange={e => setQ(e.target.value)}
             placeholder="搜索节点..."

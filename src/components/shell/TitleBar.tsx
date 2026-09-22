@@ -5,9 +5,11 @@ import {
   RotateCw, Bug, ZoomIn, ZoomOut, Maximize, Moon, Sun, HelpCircle, Info,
 } from 'lucide-react'
 import { useAppStore } from '../../stores/app-store'
+import { useShallow } from 'zustand/react/shallow'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useThemeStore } from '../../stores/theme-store'
 import { toast } from '../../stores/toast-store'
+import { menuIndexMove } from '../../lib/focus-trap'
 
 /* =====================================================================
    一体化标题栏（Codex 风格）：
@@ -24,13 +26,19 @@ interface MenuEntry {
 }
 
 export function TitleBar() {
-  const { view, currentProject, setView, setHelpOpen } = useAppStore()
-  const { canUndo, canRedo, undo, redo, saveToProject } = useWorkflowStore()
-  const { resolved, toggle } = useThemeStore()
+  const { view, currentProject, setView, setHelpOpen } = useAppStore(useShallow(s => ({
+    view: s.view, currentProject: s.currentProject, setView: s.setView, setHelpOpen: s.setHelpOpen
+  })))
+  const { canUndo, canRedo, undo, redo, saveToProject } = useWorkflowStore(useShallow(s => ({
+    canUndo: s.canUndo, canRedo: s.canRedo, undo: s.undo, redo: s.redo, saveToProject: s.saveToProject
+  })))
+  const { resolved, toggle } = useThemeStore(useShallow(s => ({ resolved: s.resolved, toggle: s.toggle })))
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [maximized, setMaximized] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   const isEditor = view === 'editor'
   const canSave = isEditor && !!currentProject
@@ -52,6 +60,43 @@ export function TitleBar() {
     return () => document.removeEventListener('mousedown', h)
   }, [menuOpen])
 
+  /** 关闭菜单并把焦点还给触发器：键盘用户不该每开一次就丢失位置 */
+  const closeMenu = (restoreFocus = true): void => {
+    setMenuOpen(false)
+    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true })
+  }
+
+  const menuItems = (): HTMLButtonElement[] =>
+    Array.from(
+      listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []
+    )
+
+  const moveMenuFocus = (from: number, delta: number): void => {
+    const items = menuItems()
+    if (items.length === 0) return
+    const at = from < 0 ? (delta > 0 ? 0 : items.length - 1) : (from + delta + items.length) % items.length
+    items[at]?.focus({ preventScroll: true })
+  }
+
+  const onMenuKey = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    const items = menuItems()
+    const current = items.indexOf(document.activeElement as HTMLButtonElement)
+    const step = menuIndexMove(e.key, current, items.length)
+    if (step !== null) {
+      e.preventDefault()
+      items[step]?.focus({ preventScroll: true })
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      closeMenu()
+    } else if (e.key === 'Tab') {
+      // Tab 在菜单里不该跑到背后的画布上去
+      e.preventDefault()
+      moveMenuFocus(current, e.shiftKey ? -1 : 1)
+    }
+  }
   // 全局快捷键（Ctrl+S / Ctrl+Z 等由画布处理，这里只保留全局导航类）
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -131,8 +176,19 @@ export function TitleBar() {
       <div ref={menuRef} className="titlebar-no-drag relative ml-1">
         <button
           type="button"
+          ref={triggerRef}
           aria-label="主菜单"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
           title="主菜单"
+          onKeyDown={e => {
+            // 键盘用户用方向键直接进菜单，鼠标用户照旧点击
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              setMenuOpen(true)
+              requestAnimationFrame(() => menuItems()[0]?.focus({ preventScroll: true }))
+            }
+          }}
           onClick={() => setMenuOpen(o => !o)}
           className={`flex items-center justify-center h-7 w-7 rounded-md transition-all duration-fast
             ${menuOpen ? 'bg-overlay text-fg' : 'text-fg-secondary hover:bg-overlay/70 hover:text-fg'}`}
@@ -141,7 +197,13 @@ export function TitleBar() {
         </button>
 
         {menuOpen && (
-          <div className="absolute left-0 top-8 z-50 w-60 bg-surface border border-line rounded-lg shadow-modal py-1.5 animate-scale-in overflow-hidden titlebar-no-drag">
+          <div
+            ref={listRef}
+            role="menu"
+            aria-label="主菜单"
+            tabIndex={-1}
+            onKeyDown={onMenuKey}
+            className="absolute left-0 top-8 z-50 w-60 bg-surface border border-line rounded-lg shadow-modal py-1.5 animate-scale-in overflow-hidden titlebar-no-drag">
             {/* 当前项目信息（编辑器内展示，不占标题栏空间） */}
             {isEditor && currentProject && (
               <div className="px-3 pb-1.5 mb-0.5 border-b border-line/70">
@@ -158,8 +220,10 @@ export function TitleBar() {
                   <button
                     key={entry.label}
                     type="button"
+                    role="menuitem"
+                    tabIndex={-1}
                     disabled={entry.disabled}
-                    onClick={entry.onClick}
+                    onClick={() => { entry.onClick(); closeMenu() }}
                     className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors duration-fast
                       ${entry.disabled
                         ? 'text-fg-faint cursor-not-allowed'

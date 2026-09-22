@@ -217,3 +217,6 @@ input:focus, textarea:focus, select:focus {
   animation: shimmer 1.6s linear infinite;
   border-radius: 6px;
 }
+
+/* ===== 运行日志：虚拟列表要求行高恒定（与 ExecutionLog 的 ROW_HEIGHT 一致） ===== */
+.logRow { height: 28px; line-height: 28px; overflow: hidden; }

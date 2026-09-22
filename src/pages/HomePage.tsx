@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { FolderPlus, Copy, Pencil, Trash2, Play, Layers, Share2, Clock } from 'lucide-react'
 import { Button, Modal, ConfirmDialog, Input, Textarea, EmptyState, Spinner, Badge } from '../components/ui'
 import { useAppStore } from '../stores/app-store'
+import { useShallow } from 'zustand/react/shallow'
 import { useWorkflowStore } from '../stores/workflow-store'
 import { toast } from '../stores/toast-store'
 import type { ProjectSummary, WorkflowTemplate } from '@shared/project'
@@ -20,7 +21,9 @@ function formatRelative(iso: string): string {
 }
 
 export function HomePage() {
-  const { projects, projectsLoaded, refreshProjects, openProject } = useAppStore()
+  const { projects, projectsLoaded, refreshProjects, openProject } = useAppStore(useShallow(s => ({
+    projects: s.projects, projectsLoaded: s.projectsLoaded, refreshProjects: s.refreshProjects, openProject: s.openProject
+  })))
   const loadWorkflow = useWorkflowStore(s => s.loadWorkflow)
 
   const [loading, setLoading] = useState(!projectsLoaded)

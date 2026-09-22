@@ -1,4 +1,5 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, useId, type ReactNode } from 'react'
+import { FOCUSABLE, nextIndex, trapDecision } from '../../lib/focus-trap'
 import { X } from 'lucide-react'
 import { Button, type ButtonVariant } from './Button'
 import { IconButton } from './Button'
@@ -32,14 +33,46 @@ export function Modal({
   maskClosable = true,
   noPadding = false,
 }: ModalProps) {
-  // ESC 关闭 + 打开时锁定背景滚动
+  const panelRef = useRef<HTMLDivElement>(null)
+  const restoreRef = useRef<HTMLElement | null>(null)
+  const titleId = useId()
+
+  // 打开时：记住触发器 → 把焦点送进面板 → 关闭后还回去。
+  // 以前只处理了 Escape，键盘用户一进弹层就"掉进黑洞"。
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+    restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+
+    const focusFirst = (): void => {
+      const panel = panelRef.current
+      if (!panel) return
+      const items = panel.querySelectorAll<HTMLElement>(FOCUSABLE)
+      ;(items[0] ?? panel).focus({ preventScroll: true })
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // 面板刚挂载，等一帧再找可聚焦元素
+    const raf = requestAnimationFrame(focusFirst)
+
+    const onKey = (e: KeyboardEvent): void => {
+      const decision = trapDecision(e.key, e.shiftKey, Boolean(panelRef.current?.contains(document.activeElement)))
+      if (decision === 'escape') {
+        e.stopPropagation()
+        onClose()
+        return
+      }
+      if (decision === 'trap' && panelRef.current) {
+        e.preventDefault()
+        const items = [...panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)]
+        if (items.length === 0) return
+        const at = items.indexOf(document.activeElement as HTMLElement)
+        items[nextIndex(items.length, at, e.shiftKey)]?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('keydown', onKey, true)
+      restoreRef.current?.focus({ preventScroll: true })
+    }
   }, [open, onClose])
 
   if (!open) return null
@@ -49,6 +82,7 @@ export function Modal({
       className="fixed inset-0 z-50 flex items-center justify-center"
       role="dialog"
       aria-modal="true"
+      aria-labelledby={title !== undefined ? titleId : undefined}
     >
       {/* 遮罩 */}
       <div
@@ -57,12 +91,14 @@ export function Modal({
       />
       {/* 面板 */}
       <div
-        className="relative bg-surface border border-line rounded-xl shadow-modal animate-scale-in flex flex-col max-h-[85vh] max-w-[92vw]"
+        ref={panelRef}
+        tabIndex={-1}
+        className="relative bg-surface border border-line rounded-xl shadow-modal animate-scale-in flex flex-col max-h-[85vh] max-w-[92vw] outline-none"
         style={{ width }}
       >
         {title !== undefined && (
           <div className="flex items-center justify-between px-5 h-12 border-b border-line shrink-0">
-            <h3 className="text-sm font-semibold text-fg truncate">{title}</h3>
+            <h3 id={titleId} className="text-sm font-semibold text-fg truncate">{title}</h3>
             <IconButton size="sm" tooltip="关闭 (Esc)" onClick={onClose}>
               <X />
             </IconButton>

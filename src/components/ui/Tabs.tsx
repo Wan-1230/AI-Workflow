@@ -23,6 +23,11 @@ interface TabsProps<T extends string = string> {
   /** 滑块动画时长（ms） */
   duration?: number
   className?: string
+  /**
+   * 提供后会补上 tab / tabpanel 的 id 与 aria-controls 关联。
+   * 不给就是纯视觉切换器（面板不在这个组件里的场景）。
+   */
+  idPrefix?: string
 }
 
 /**
@@ -37,6 +42,7 @@ export function Tabs<T extends string = string>({
   variant = 'pill',
   duration = 220,
   className = '',
+  idPrefix,
 }: TabsProps<T>) {
   const listRef = useRef<HTMLDivElement>(null)
   const [slider, setSlider] = useState<{ left: number; width: number } | null>(null)
@@ -65,7 +71,21 @@ export function Tabs<T extends string = string>({
   const inactiveText = 'text-fg-secondary hover:text-fg'
 
   return (
-    <div ref={listRef} className={[base, className].join(' ')} role="tablist">
+    <div
+      ref={listRef}
+      className={[base, className].join(' ')}
+      role="tablist"
+      onKeyDown={e => {
+        // 标签页的键盘约定是左右键切换，而不是让每个 tab 各占一次 Tab 停留
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+        const enabled = items.filter(i => !i.disabled)
+        if (enabled.length < 2) return
+        e.preventDefault()
+        const at = enabled.findIndex(i => i.value === value)
+        const step = e.key === 'ArrowRight' ? 1 : -1
+        onChange(enabled[(at + step + enabled.length) % enabled.length].value)
+      }}
+    >
       {/* 滑块 */}
       {slider && variant === 'pill' && (
         <div
@@ -87,6 +107,10 @@ export function Tabs<T extends string = string>({
             type="button"
             role="tab"
             aria-selected={active}
+            // 没有 aria-controls 的 tab 只是"看起来像"标签页：读屏无法跳到面板
+            id={idPrefix ? `${idPrefix}-tab-${item.value}` : undefined}
+            aria-controls={idPrefix ? `${idPrefix}-panel-${item.value}` : undefined}
+            tabIndex={active ? 0 : -1}
             data-tab-value={item.value}
             disabled={item.disabled}
             onClick={() => onChange(item.value)}

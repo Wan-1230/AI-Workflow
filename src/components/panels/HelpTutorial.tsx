@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { X, Keyboard, ChevronRight, ChevronLeft } from 'lucide-react'
-import { IconButton, Button } from '../ui'
+import { Keyboard, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Modal, Button, Tabs } from '../ui'
 
 /** 快捷键说明表 */
 const shortcuts: { keys: string[]; desc: string }[] = [
@@ -38,38 +38,37 @@ export function HelpTutorial({ open, onClose }: { open: boolean; onClose: () => 
   const isLast = step === steps.length - 1
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/45 backdrop-blur-[2px] z-50 animate-fade-in" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[520px] max-w-[92vw] animate-scale-in">
-        <div className="bg-surface border border-line rounded-xl shadow-modal overflow-hidden">
-          {/* 头部 */}
-          <div className="flex items-center justify-between px-5 h-12 border-b border-line">
-            <div className="flex items-center gap-2">
-              <Keyboard size={15} className="text-accent" />
-              <h2 className="text-sm font-semibold text-fg">帮助与快捷键</h2>
-            </div>
-            <IconButton size="sm" tooltip="关闭 (Esc)" onClick={onClose}>
-              <X />
-            </IconButton>
-          </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      width={520}
+      noPadding
+      title={
+        <span className="flex items-center gap-2">
+          <Keyboard size={15} className="text-accent" />
+          帮助与快捷键
+        </span>
+      }
+    >
 
-          {/* Tab 切换 */}
-          <div className="flex gap-1 px-5 pt-3">
-            {([['guide', '使用引导'], ['keys', '快捷键']] as const).map(([v, label]) => (
-              <button
-                key={v}
-                onClick={() => setTab(v)}
-                className={`px-3 h-7 rounded-md text-xs font-medium transition-colors ${
-                  tab === v ? 'bg-accent-soft text-accent' : 'text-fg-secondary hover:bg-overlay hover:text-fg'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          {/* 用设计系统的 Tabs：自带 role="tab" / aria-selected，原来这组按钮没有语义 */}
+          <div className="px-5 pt-3">
+            <Tabs
+              idPrefix="help"
+              items={[{ value: 'guide', label: '使用引导' }, { value: 'keys', label: '快捷键' }]}
+              value={tab}
+              onChange={v => setTab(v as 'guide' | 'keys')}
+              variant="underline"
+            />
           </div>
 
           {/* 内容 */}
-          <div className="p-5 min-h-52">
+          <div
+            role="tabpanel"
+            id={`help-panel-${tab}`}
+            aria-labelledby={`help-tab-${tab}`}
+            tabIndex={0}
+            className="p-5 min-h-52 outline-none">
             {tab === 'guide' ? (
               <div>
                 <div className="mb-1 text-2xs text-fg-muted">第 {step + 1} / {steps.length} 步</div>
@@ -105,8 +104,6 @@ export function HelpTutorial({ open, onClose }: { open: boolean; onClose: () => 
               </div>
             )}
           </div>
-        </div>
-      </div>
-    </>
+    </Modal>
   )
 }

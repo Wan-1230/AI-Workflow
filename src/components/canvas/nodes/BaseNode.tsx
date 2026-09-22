@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect, useRef } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Copy, Trash2, RotateCcw } from 'lucide-react'
 import { useWorkflowStore, type ExecutionStatus } from '../../../stores/workflow-store'
+import { useShallow } from 'zustand/react/shallow'
 import { nodeCatalog } from '@shared/node-catalog'
 
 interface BaseNodeData {
@@ -23,9 +24,13 @@ const catLabels: Record<string, string> = {
 }
 
 function BaseNodeComponent({ id, data, selected }: NodeProps) {
-  const { selectNode, execution, removeNode, duplicateNode } = useWorkflowStore()
   const nd = data as unknown as BaseNodeData
-  const status: ExecutionStatus = execution.nodeStatuses[id] || 'idle'
+  // 窄订阅：只取自己那个节点的状态。整份 store 订阅会让每个事件把整张画布
+  // 重渲染一遍（一次运行 N 个节点 × 每个事件 2 次 set）。
+  const status = useWorkflowStore(s => s.execution.nodeStatuses[id]) ?? 'idle'
+  const { selectNode, removeNode, duplicateNode } = useWorkflowStore(
+    useShallow(s => ({ selectNode: s.selectNode, removeNode: s.removeNode, duplicateNode: s.duplicateNode }))
+  )
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const branchHandles = nodeCatalog[nd.nodeType]?.sourceHandles
@@ -36,8 +41,19 @@ function BaseNodeComponent({ id, data, selected }: NodeProps) {
     const h = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(null)
     }
+    // Escape 关不掉右键菜单，键盘用户只能靠再点一次别处"碰运气"
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setMenu(null)
+      }
+    }
     document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    document.addEventListener('keydown', k)
+    return () => {
+      document.removeEventListener('mousedown', h)
+      document.removeEventListener('keydown', k)
+    }
   }, [menu])
 
   const onCtx = useCallback((e: React.MouseEvent) => {

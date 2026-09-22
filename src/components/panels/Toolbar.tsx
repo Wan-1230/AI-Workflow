@@ -1,24 +1,32 @@
 import { useCallback, useState } from 'react'
 import { Undo2, Redo2, LayoutGrid, Download, Upload, Trash2, Play, Square, HelpCircle, Variable } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '../../stores/app-store'
 import { IconButton, Button, ConfirmDialog } from '../ui'
 import { toast } from '../../stores/toast-store'
+import { judgeImport } from '../../lib/import-guard'
 import { HelpTutorial } from './HelpTutorial'
 import { GlobalVariablesModal } from './GlobalVariables'
-import type { WorkflowDefinition } from '@shared/workflow'
 
 /**
  * 画布工具栏：撤销/重做、自动布局、导入导出、清空、变量、运行/停止
  */
 export function Toolbar() {
+  // 只订阅工具栏真正读到的字段；整份 store 订阅会让每个运行事件重渲染工具栏
   const {
     canUndo, canRedo, undo, redo,
     autoLayout, clearCanvas,
     execute, cancelExecution, resetExecution,
     execution, nodes,
     toWorkflowJSONString, loadWorkflow
-  } = useWorkflowStore()
+  } = useWorkflowStore(useShallow(s => ({
+    canUndo: s.canUndo, canRedo: s.canRedo, undo: s.undo, redo: s.redo,
+    autoLayout: s.autoLayout, clearCanvas: s.clearCanvas,
+    execute: s.execute, cancelExecution: s.cancelExecution, resetExecution: s.resetExecution,
+    execution: s.execution, nodes: s.nodes,
+    toWorkflowJSONString: s.toWorkflowJSONString, loadWorkflow: s.loadWorkflow
+  })))
 
   const [showVars, setShowVars] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -53,13 +61,15 @@ export function Toolbar() {
     try {
       const res = await window.api.dialogOpen()
       if (res.success && res.data) {
-        const wf = res.data as WorkflowDefinition
-        if (!Array.isArray(wf.nodes)) {
-          toast.error('导入失败', '文件格式不正确：缺少 nodes 数组')
+        // 校验前移到落地画布之前：坏结构过去会被兜底成通用节点，等到运行时才炸
+        const verdict = judgeImport(res.data)
+        if (!verdict.ok || !verdict.workflow) {
+          toast.error(verdict.title, verdict.detail)
           return
         }
-        loadWorkflow(wf)
-        toast.success(`已导入「${wf.name || '未命名工作流'}」`)
+        loadWorkflow(verdict.workflow)
+        if (verdict.warnings) toast.warning('导入完成，但有提醒', verdict.warnings)
+        else toast.success(verdict.title)
       } else if (res.error) {
         toast.error('导入失败', res.error)
       }
