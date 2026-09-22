@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
+import { openStore } from './connection'
 import { join } from 'path'
 import { app } from 'electron'
 import type { NodeResult } from '@shared/workflow'
@@ -54,10 +55,7 @@ export class ExecutionStorage {
 
   constructor(dbPath?: string) {
     const resolvedPath = dbPath || join(app.getPath('userData'), 'executions.db')
-    this.db = new Database(resolvedPath)
-
-    // 启用 WAL 模式提升并发性能
-    this.db.pragma('journal_mode = WAL')
+    this.db = openStore('executions', resolvedPath)
 
     this.initSchema()
   }
@@ -178,6 +176,27 @@ export class ExecutionStorage {
   /**
    * 获取统计信息
    */
+  /**
+   * 删项目时清掉它的执行历史。
+
+   * 跨文件做不了外键级联，所以顺序上先删子（历史）再删父（项目）：
+   * 中途失败只剩「历史已清、项目还在」，用户重试即可；反过来就会留下永久孤儿。
+   */
+  purgeWorkflow(workflowId: string): number {
+    return this.db.prepare('DELETE FROM executions WHERE workflow_id = ?').run(workflowId).changes
+  }
+
+  /** 启动清理：以前删项目不连带删记录，那些行会永远挂在日志页且打不开 */
+  purgeOrphans(existingWorkflowIds: Iterable<string>): number {
+    const keep = [...existingWorkflowIds]
+    if (keep.length === 0) {
+      return this.db.prepare('DELETE FROM executions').run().changes
+    }
+    const marks = keep.map(() => '?').join(', ')
+    return this.db
+      .prepare(`DELETE FROM executions WHERE workflow_id NOT IN (${marks})`)
+      .run(...keep).changes
+  }
   getStats(): { total: number; completed: number; error: number; avgDuration: number } {
     const row = this.db.prepare(`
       SELECT

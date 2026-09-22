@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
+import { openStore } from './connection'
 import { join } from 'path'
 import { app } from 'electron'
 import type { AppSettings, AppSettingsInput } from '@shared/settings'
@@ -21,8 +22,7 @@ export class SettingsStore {
 
   constructor(dbPath?: string) {
     const resolvedPath = dbPath || join(app.getPath('userData'), 'settings.db')
-    this.db = new Database(resolvedPath)
-    this.db.pragma('journal_mode = WAL')
+    this.db = openStore('settings', resolvedPath)
     this.initSchema()
   }
 

@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
+import { openStore } from './connection'
 import { join } from 'path'
 import { app } from 'electron'
 import type { PromptTemplate, PromptTemplateInput, PromptRenderResult } from '@shared/prompt'
@@ -36,8 +37,7 @@ export class PromptStore {
 
   constructor(dbPath?: string) {
     const resolvedPath = dbPath || join(app.getPath('userData'), 'prompts.db')
-    this.db = new Database(resolvedPath)
-    this.db.pragma('journal_mode = WAL')
+    this.db = openStore('prompts', resolvedPath)
     this.initSchema()
   }
 

@@ -494,6 +494,11 @@ function setupIPC() {
   // 删除项目
   ipcMain.handle('projects:delete', (_event, id: string) => {
     try {
+      // 先删执行历史再删项目：六个库分文件，做不到外键级联，
+      // 顺序反了就会在失败时留下永远打不开的孤儿记录
+      for (const wid of projectStore?.workflowIdsOf(id) ?? [id]) {
+        executionStorage?.purgeWorkflow(wid)
+      }
       const ok = projectStore?.delete(id) || false
       return { success: ok, error: ok ? undefined : '项目不存在' }
     } catch (err: unknown) {
@@ -722,6 +727,9 @@ app.whenReady().then(() => {
     const settings = settingsStore?.getAll()
     if (settings?.defaultTimeout) engine.setDefaultTimeout(settings.defaultTimeout)
     executionStorage?.pruneHistory()
+    // 早年删项目不连带删历史，这些行会一直显示在日志页且点不开
+    const orphans = executionStorage?.purgeOrphans(projectStore?.allWorkflowIds() ?? []) ?? 0
+    if (orphans > 0) console.log(`清理孤儿执行记录 ${orphans} 条`)
   } catch (err) {
     console.error('应用全局设置失败:', err)
   }

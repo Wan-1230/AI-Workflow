@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
+import { openStore } from './connection'
 import { join } from 'path'
 import { app, safeStorage } from 'electron'
 import type { ModelConfig, ModelConfigInput, ModelTestResult } from '@shared/model'
@@ -26,8 +27,7 @@ export class ModelStore {
 
   constructor(dbPath?: string) {
     const resolvedPath = dbPath || join(app.getPath('userData'), 'models.db')
-    this.db = new Database(resolvedPath)
-    this.db.pragma('journal_mode = WAL')
+    this.db = openStore('models', resolvedPath)
     this.initSchema()
   }
 
@@ -152,9 +152,12 @@ export class ModelStore {
   /** 设为默认 */
   setDefault(id: string): boolean {
     if (!this.getConfig(id)) return false
-    this.clearDefault()
-    this.db.prepare('UPDATE models SET is_default = 1, updated_at = ? WHERE id = ?')
-      .run(new Date().toISOString(), id)
+    // 清掉旧默认与设新默认之间若失败，库里会一个默认都没有；两步必须同事务
+    this.db.transaction(() => {
+      this.clearDefault()
+      this.db.prepare('UPDATE models SET is_default = 1, updated_at = ? WHERE id = ?')
+        .run(new Date().toISOString(), id)
+    })()
     return true
   }
 

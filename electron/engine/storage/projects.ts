@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
+import { openStore } from './connection'
 import { join } from 'path'
 import { app } from 'electron'
 import type { WorkflowDefinition } from '@shared/workflow'
@@ -23,8 +24,7 @@ export class ProjectStore {
 
   constructor(dbPath?: string) {
     const resolvedPath = dbPath || join(app.getPath('userData'), 'projects.db')
-    this.db = new Database(resolvedPath)
-    this.db.pragma('journal_mode = WAL')
+    this.db = openStore('projects', resolvedPath)
     this.initSchema()
   }
 
@@ -156,6 +156,41 @@ export class ProjectStore {
   }
 
   /** 项目完整数据（含工作流） */
+  /**
+   * 该项目对应的全部工作流 id：项目 id 与工作流自身的 id。
+
+   * 执行历史记的是 workflow.id，二者多数情况相同但不保证 ——
+   * 从模板新建、导入覆盖都可能让 workflow.id 偏离项目 id。
+   */
+  workflowIdsOf(id: string): string[] {
+    const row = this.db.prepare('SELECT workflow_json FROM projects WHERE id = ?').get(id) as
+      | { workflow_json: string }
+      | undefined
+    if (!row) return [id]
+    try {
+      const wf = JSON.parse(row.workflow_json) as { id?: string }
+      const inner = typeof wf.id === 'string' && wf.id ? wf.id : null
+      return inner && inner !== id ? [id, inner] : [id]
+    } catch {
+      return [id]
+    }
+  }
+
+  /** 全部项目的工作流 id，供启动时清理孤儿执行记录 */
+  allWorkflowIds(): string[] {
+    const rows = this.db.prepare('SELECT id, workflow_json FROM projects').all() as Array<
+      { id: string; workflow_json: string }
+    >
+    const out = new Set<string>()
+    for (const row of rows) {
+      out.add(row.id)
+      try {
+        const wf = JSON.parse(row.workflow_json) as { id?: string }
+        if (typeof wf.id === 'string' && wf.id) out.add(wf.id)
+      } catch { /* 损坏的项目按 id 保留，不做级联清理 */ }
+    }
+    return [...out]
+  }
   get(id: string): ProjectRecord | null {
     const summary = this.getSummary(id)
     if (!summary) return null

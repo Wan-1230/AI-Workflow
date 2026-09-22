@@ -1,5 +1,6 @@
 import { safeStorage } from 'electron'
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
+import { openStore } from './connection'
 import { join } from 'path'
 import { app } from 'electron'
 
@@ -20,8 +21,7 @@ export class CredentialManager {
 
   constructor(dbPath?: string) {
     const resolvedPath = dbPath || join(app.getPath('userData'), 'credentials.db')
-    this.db = new Database(resolvedPath)
-    this.db.pragma('journal_mode = WAL')
+    this.db = openStore('credentials', resolvedPath)
     this.initSchema()
   }
 
