@@ -1,5 +1,5 @@
 import { safeStorage } from 'electron'
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
 import { openStore } from './connection'
 import { join } from 'path'
 import { app } from 'electron'
